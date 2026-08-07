@@ -47,6 +47,22 @@ cd ai-cli-paste-shield
 This repository intentionally ships as a shell script. No Swift app, no binary,
 no Accessibility permission, no Input Monitoring permission.
 
+## Downloadable App
+
+For users who do not want to work from source, download the macOS app zip from
+the GitHub Releases page:
+
+```text
+ime-safe-ai-cli-terminal-macos.zip
+```
+
+Unzip it, open `IME Safe AI CLI Terminal.app`, then follow the guided wizard.
+The app is a lightweight wrapper around the same local scripts in this
+repository.
+
+The release app is ad-hoc signed but not notarized. macOS may show a first-run
+security warning for downloads outside the App Store.
+
 ## Guided Wizard
 
 For non-developers, double-click:
