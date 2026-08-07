@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="AI CLI Paste Shield"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PASTE_SCRIPT="$SCRIPT_DIR/ai-cli-paste"
+
+target="claude"
+session="claude"
+
+die() {
+  printf '\n%s\n' "$*" >&2
+  exit 1
+}
+
+pause() {
+  printf '\nPress Enter to continue... '
+  read -r _
+}
+
+line() {
+  printf '%s\n' '------------------------------------------------------------'
+}
+
+has() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+ask_install_tmux() {
+  if has osascript; then
+    osascript <<'OSA' 2>/dev/null || true
+display dialog "tmux is required to send text safely into interactive AI CLI sessions." buttons {"Cancel", "Install tmux"} default button "Install tmux" cancel button "Cancel" with title "AI CLI Paste Shield"
+OSA
+    return
+  fi
+
+  printf 'Install tmux now with Homebrew? [Y/n] '
+  read -r answer
+  case "$answer" in
+    n|N|no|NO)
+      printf 'button returned:Cancel\n'
+      ;;
+    *)
+      printf 'button returned:Install tmux\n'
+      ;;
+  esac
+}
+
+shell_quote() {
+  printf '%q' "$1"
+}
+
+terminal_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+detect_cli() {
+  case "$1" in
+    claude)
+      command -v claude 2>/dev/null || true
+      ;;
+    codex)
+      command -v codex 2>/dev/null || {
+        [ -x "/Applications/ChatGPT.app/Contents/Resources/codex" ] && printf '%s\n' "/Applications/ChatGPT.app/Contents/Resources/codex"
+      }
+      ;;
+    gemini)
+      command -v gemini 2>/dev/null || true
+      ;;
+  esac
+}
+
+check_tmux() {
+  if has tmux; then
+    printf 'tmux: OK (%s)\n' "$(command -v tmux)"
+    return 0
+  fi
+
+  printf 'tmux is not installed yet.\n'
+  if ! has brew; then
+    printf 'Homebrew was not found. Install Homebrew first, then run:\n'
+    printf '  brew install tmux\n'
+    return 1
+  fi
+
+  install_choice="$(ask_install_tmux)"
+  case "$install_choice" in
+    *Cancel*)
+      printf 'Skipped tmux installation.\n'
+      return 1
+      ;;
+    *)
+      brew install tmux
+      ;;
+  esac
+}
+
+install_helper() {
+  if [ ! -x "$PASTE_SCRIPT" ]; then
+    die "Missing helper script: $PASTE_SCRIPT"
+  fi
+  "$SCRIPT_DIR/install.sh"
+}
+
+choose_target() {
+  line
+  printf 'Choose an AI CLI target:\n'
+  printf '  1) Claude Code\n'
+  printf '  2) Codex\n'
+  printf '  3) Gemini CLI\n'
+  printf '\nChoice [1]: '
+  read -r choice
+
+  case "${choice:-1}" in
+    1)
+      target="claude"
+      session="claude"
+      ;;
+    2)
+      target="codex"
+      session="codex"
+      ;;
+    3)
+      target="gemini"
+      session="gemini"
+      ;;
+    *)
+      printf 'Unknown choice. Keeping %s.\n' "$target"
+      ;;
+  esac
+
+  cli_path="$(detect_cli "$target")"
+  if [ -n "$cli_path" ]; then
+    printf '%s: OK (%s)\n' "$target" "$cli_path"
+  else
+    printf '%s: not found in PATH.\n' "$target"
+    printf 'You can still create the tmux session after installing it.\n'
+  fi
+}
+
+start_session() {
+  check_tmux || {
+    pause
+    return
+  }
+
+  cli_path="$(detect_cli "$target")"
+  if [ -z "$cli_path" ]; then
+    printf '%s command was not found. Install/login to that CLI first.\n' "$target"
+    pause
+    return
+  fi
+
+  session_cmd="tmux new-session -A -s $(shell_quote "$session") $(shell_quote "$cli_path")"
+  escaped_cmd="$(terminal_escape "$session_cmd")"
+
+  osascript >/dev/null <<OSA
+tell application "Terminal"
+  activate
+  do script "$escaped_cmd"
+end tell
+OSA
+
+  printf 'Opened Terminal with tmux session "%s" running %s.\n' "$session" "$target"
+  printf 'Leave that window open. Write your prompt anywhere, copy it, then use Paste Clipboard.\n'
+  pause
+}
+
+paste_clipboard() {
+  check_tmux || {
+    pause
+    return
+  }
+
+  if ! tmux has-session -t "$session" 2>/dev/null; then
+    printf 'No tmux session named "%s" is running yet.\n' "$session"
+    printf 'Choose "Start or attach AI CLI session" first.\n'
+    pause
+    return
+  fi
+
+  printf 'Paste clipboard into "%s" and press Enter? [Y/n] ' "$session"
+  read -r answer
+  case "$answer" in
+    n|N|no|NO)
+      "$PASTE_SCRIPT" "$session"
+      ;;
+    *)
+      "$PASTE_SCRIPT" "$session" --enter
+      ;;
+  esac
+  pause
+}
+
+open_docs() {
+  if has open; then
+    open "$SCRIPT_DIR/README.md"
+  else
+    printf 'README: %s\n' "$SCRIPT_DIR/README.md"
+  fi
+}
+
+show_status() {
+  line
+  printf '%s\n' "$APP_NAME"
+  line
+  printf 'Current target: %s\n' "$target"
+  printf 'tmux: '
+  if has tmux; then
+    printf 'OK\n'
+  else
+    printf 'missing\n'
+  fi
+  printf '%s CLI: ' "$target"
+  cli_path="$(detect_cli "$target")"
+  if [ -n "$cli_path" ]; then
+    printf 'OK\n'
+  else
+    printf 'missing\n'
+  fi
+  printf '\n'
+}
+
+main_menu() {
+  while true; do
+    clear || true
+    show_status
+    printf 'What do you want to do?\n'
+    printf '  1) Install/check helper tools\n'
+    printf '  2) Choose AI CLI target\n'
+    printf '  3) Start or attach AI CLI session\n'
+    printf '  4) Paste clipboard to current session\n'
+    printf '  5) Open README\n'
+    printf '  6) Quit\n'
+    printf '\nChoice [3]: '
+    read -r choice
+
+    case "${choice:-3}" in
+      1)
+        check_tmux || true
+        install_helper
+        pause
+        ;;
+      2)
+        choose_target
+        pause
+        ;;
+      3)
+        start_session
+        ;;
+      4)
+        paste_clipboard
+        ;;
+      5)
+        open_docs
+        pause
+        ;;
+      6|q|Q)
+        exit 0
+        ;;
+      *)
+        printf 'Unknown choice.\n'
+        pause
+        ;;
+    esac
+  done
+}
+
+main_menu

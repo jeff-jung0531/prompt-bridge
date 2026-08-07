@@ -42,6 +42,29 @@ cd ai-cli-paste-shield
 This repository intentionally ships as a shell script. No Swift app, no binary,
 no Accessibility permission, no Input Monitoring permission.
 
+## Guided Wizard
+
+For non-developers, double-click:
+
+```text
+AI CLI Paste Shield.command
+```
+
+The wizard walks through:
+
+- checking `tmux`
+- choosing Claude, Codex, or Gemini
+- opening the selected CLI inside a named tmux session
+- pasting your copied prompt into that session
+
+If `tmux` is missing, the wizard shows an `Install tmux` button and installs it
+with Homebrew. If `tmux` is already installed, it skips that step automatically.
+To install it yourself first:
+
+```bash
+brew install tmux
+```
+
 ## Quick Start
 
 Start your AI CLI inside a named tmux session:
