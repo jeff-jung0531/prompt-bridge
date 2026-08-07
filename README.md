@@ -9,6 +9,11 @@ input glitches in interactive AI CLIs. It sends completed text into an existing
 `tmux` session using bracketed paste, so the CLI receives a paste event instead
 of fragile character-by-character IME input.
 
+Important: this repository is the small fallback utility, not the final product
+shape. The better long-term app is an IME-safe AI terminal/input layer where
+users type normally and the app handles the fragile input path automatically.
+See [`docs/focus-aware-input-design.md`](docs/focus-aware-input-design.md).
+
 ## Why
 
 Some AI CLIs run inside terminal UIs where macOS IME composition, terminal input,
@@ -154,6 +159,8 @@ end)
 ```
 
 See also [`docs/why-cjk-ime-breaks.md`](docs/why-cjk-ime-breaks.md).
+See the long-term app direction in
+[`docs/focus-aware-input-design.md`](docs/focus-aware-input-design.md).
 
 ## What This Helps
 
