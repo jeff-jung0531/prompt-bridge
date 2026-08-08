@@ -53,7 +53,7 @@ For users who do not want to work from source, download the macOS app zip from
 the GitHub Releases page:
 
 ```text
-ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/latest/download/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, then follow the guided prompts.
