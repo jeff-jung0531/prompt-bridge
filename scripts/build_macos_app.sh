@@ -9,6 +9,10 @@ contents_dir="$app_dir/Contents"
 macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
 
+if [ -d "$app_dir" ]; then
+  rm -R "$app_dir"
+fi
+
 mkdir -p "$macos_dir" "$resources_dir" "$dist_dir"
 
 if [ ! -f "$root_dir/assets/AppIcon.icns" ]; then
@@ -27,7 +31,7 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key>
   <string>IME Safe AI CLI Terminal</string>
   <key>CFBundleExecutable</key>
-  <string>launcher</string>
+  <string>IMESafeAI</string>
   <key>CFBundleIdentifier</key>
   <string>dev.jeffjung.imesafeaicliterminal</string>
   <key>CFBundleIconFile</key>
@@ -50,17 +54,7 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-cat > "$macos_dir/launcher" <<'LAUNCHER'
-#!/usr/bin/env bash
-set -euo pipefail
-
-app_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-gui="$app_root/Contents/Resources/ai-cli-paste-gui"
-
-exec "$gui"
-LAUNCHER
-
-chmod +x "$macos_dir/launcher"
+swiftc "$root_dir/Sources/IMESafeAI/main.swift" -o "$macos_dir/IMESafeAI" -framework AppKit
 
 cp "$root_dir/ai-cli-paste" "$resources_dir/ai-cli-paste"
 cp "$root_dir/ai-cli-paste-gui" "$resources_dir/ai-cli-paste-gui"
