@@ -61,6 +61,12 @@ GitHub repo:
 https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal
 ```
 
+Additional launch/social copy:
+
+```text
+docs/share-kit.md
+```
+
 ## Suggested Hero Copy
 
 Headline:
