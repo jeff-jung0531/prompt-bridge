@@ -46,11 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private var targetButtons: [String: NSButton] = [:]
     private var statusView: NSTextView!
+    private var openButton: NSButton!
+    private var summaryLabel: NSTextField!
     private var sendEnterCheckbox: NSButton!
     private var detailsContainer: NSScrollView!
     private var detailsButton: NSButton!
     private var detailsHeightConstraint: NSLayoutConstraint!
     private var detailsVisible = false
+    private var startingTargetIDs = Set<String>()
+    private var startingDeadline: Date?
 
     private var resourceURL: URL {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -97,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
         sendEnterCheckbox.state = .on
 
-        let openButton = NSButton(title: "Start Selected", target: self, action: #selector(openSelectedAction))
+        openButton = NSButton(title: "Start Selected", target: self, action: #selector(openSelectedAction))
         openButton.bezelStyle = .rounded
         openButton.keyEquivalent = "\r"
 
@@ -128,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let targetLabel = NSTextField(labelWithString: "Targets")
         targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
 
+        summaryLabel = NSTextField(labelWithString: "Checking sessions...")
+        summaryLabel.textColor = .secondaryLabelColor
+        summaryLabel.font = .systemFont(ofSize: 12, weight: .medium)
+
         let targetGrid = NSGridView()
         targetGrid.rowSpacing = 7
         targetGrid.columnSpacing = 14
@@ -150,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             targetGrid.addRow(with: rowViews)
         }
 
-        let targetStack = NSStackView(views: [targetLabel, targetGrid, sendEnterCheckbox])
+        let targetStack = NSStackView(views: [targetLabel, summaryLabel, targetGrid, sendEnterCheckbox])
         targetStack.orientation = .vertical
         targetStack.alignment = .leading
         targetStack.spacing = 8
@@ -160,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let hint = NSTextField(labelWithString: "Start Selected is a one-time setup for each session. Already active sessions stay active and are not opened again.")
+        let hint = NSTextField(labelWithString: "Start Selected becomes Started once every selected session is active.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
@@ -208,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshStatus()
         if allSucceeded {
-            hideAfterSuccess()
+            scheduleStartupRefresh()
         }
     }
 
@@ -245,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openSession(_ target: Target) -> Bool {
         guard ensureTmux() else { return false }
         if hasSession(target.session) {
+            startingTargetIDs.remove(target.id)
             appendStatus("\(target.label): already active. You can keep using Send Clipboard.")
             return true
         }
@@ -264,7 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         end tell
         """
         if runAppleScript(script) {
-            appendStatus("Opened \(target.label) in tmux session '\(target.session)'.")
+            startingTargetIDs.insert(target.id)
+            startingDeadline = Date().addingTimeInterval(15)
+            appendStatus("Starting \(target.label). Waiting for tmux session '\(target.session)' to become active.")
             return true
         }
         return false
@@ -304,6 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lines.append("")
 
         let sessions = tmuxSessions()
+        clearFinishedStartupStates(activeSessions: sessions)
+        updateVisibleTargetState(activeSessions: sessions)
         for target in Target.all {
             let cli = detectCLI(target) == nil ? "missing" : "OK"
             let session = sessions.contains(target.session) ? "active" : "not running"
@@ -316,6 +329,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         setStatus(lines.joined(separator: "\n"))
+    }
+
+    private func updateVisibleTargetState(activeSessions: [String]) {
+        for target in Target.all {
+            let commandFound = detectCLI(target) != nil
+            let active = activeSessions.contains(target.session)
+            let suffix: String
+            if active {
+                suffix = " (active)"
+            } else if startingTargetIDs.contains(target.id) {
+                suffix = " (starting)"
+            } else if commandFound {
+                suffix = " (not running)"
+            } else {
+                suffix = " (missing)"
+            }
+            targetButtons[target.id]?.title = target.label + suffix
+        }
+
+        let selected = selectedTargets
+        if selected.isEmpty {
+            summaryLabel.stringValue = "Select one or more targets."
+            summaryLabel.textColor = .secondaryLabelColor
+            openButton.title = "Start Selected"
+            openButton.isEnabled = false
+            return
+        }
+
+        let allSelectedActive = selected.allSatisfy { activeSessions.contains($0.session) }
+        let selectedStarting = selected.filter { startingTargetIDs.contains($0.id) }
+        if !selectedStarting.isEmpty {
+            summaryLabel.stringValue = "Starting: waiting for \(selectedStarting.count) selected session\(selectedStarting.count == 1 ? "" : "s")."
+            summaryLabel.textColor = .systemOrange
+            openButton.title = "Starting..."
+            openButton.isEnabled = false
+        } else if allSelectedActive {
+            summaryLabel.stringValue = "Ready: every selected session is active."
+            summaryLabel.textColor = .systemGreen
+            openButton.title = "Started"
+            openButton.isEnabled = false
+        } else {
+            let missingCount = selected.filter { !activeSessions.contains($0.session) }.count
+            summaryLabel.stringValue = "Needs start: \(missingCount) selected session\(missingCount == 1 ? "" : "s") not running."
+            summaryLabel.textColor = .systemOrange
+            openButton.title = "Start Selected"
+            openButton.isEnabled = true
+        }
+    }
+
+    private func clearFinishedStartupStates(activeSessions: [String]) {
+        for target in Target.all where activeSessions.contains(target.session) {
+            startingTargetIDs.remove(target.id)
+        }
+
+        if let deadline = startingDeadline, Date() > deadline {
+            startingTargetIDs.removeAll()
+            startingDeadline = nil
+        }
+    }
+
+    private func scheduleStartupRefresh() {
+        guard !startingTargetIDs.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self else { return }
+            self.refreshStatus()
+            self.scheduleStartupRefresh()
+        }
     }
 
     private func ensureTmux() -> Bool {

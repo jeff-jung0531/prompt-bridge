@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.9/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.12/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -123,6 +123,12 @@ Current v0.1 app shape:
   Details.
 - Start Selected is one-time setup per target; already active sessions stay
   active and are not opened again.
+- Once every selected session is active, Start Selected changes to Started and
+  is disabled.
+- The target list visibly marks each tool as active, not running, or missing,
+  with a readiness summary above the checkboxes.
+- While Terminal is creating the session, the app shows a starting state and
+  keeps Start Selected disabled instead of flipping back to clickable.
 - Includes only major tools with direct IME/input-risk evidence by default.
 - Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.

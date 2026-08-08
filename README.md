@@ -41,7 +41,7 @@ commands, interrupts, tool permissions, and multi-turn context.
 Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.9/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.12/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
@@ -216,9 +216,14 @@ clipboard text to the checked active sessions:
 Use `Start Selected` for the checked targets and `Send Clipboard` when you want
 to transfer copied text to those checked sessions.
 
-`Start Selected` is a one-time setup for each selected target. If a selected
-tmux session is already active, the app leaves it running and does not open a
-second Terminal window for the same target.
+`Start Selected` is a one-time setup for each selected target. Once every
+selected session is active, the button changes to `Started` and is disabled.
+If a selected tmux session is already active, the app leaves it running and does
+not open a second Terminal window for the same target.
+
+The app also shows visible proof in the target list: each target is marked as
+`(starting)`, `(active)`, `(not running)`, or `(missing)`, with a readiness
+summary above the checkboxes.
 
 Watchlist, not included by default until there is clearer matching evidence:
 Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, GitHub Copilot CLI.
