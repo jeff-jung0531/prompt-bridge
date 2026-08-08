@@ -11,6 +11,11 @@ resources_dir="$contents_dir/Resources"
 
 mkdir -p "$macos_dir" "$resources_dir" "$dist_dir"
 
+if [ ! -f "$root_dir/assets/AppIcon.icns" ]; then
+  "$root_dir/scripts/generate_app_icon.swift"
+  iconutil -c icns "$root_dir/assets/AppIcon.iconset" -o "$root_dir/assets/AppIcon.icns"
+fi
+
 cat > "$contents_dir/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -25,6 +30,8 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
   <string>launcher</string>
   <key>CFBundleIdentifier</key>
   <string>dev.jeffjung.imesafeaicliterminal</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -61,6 +68,7 @@ cp "$root_dir/ai-cli-paste-wizard" "$resources_dir/ai-cli-paste-wizard"
 cp "$root_dir/install.sh" "$resources_dir/install.sh"
 cp "$root_dir/README.md" "$resources_dir/README.md"
 cp "$root_dir/LICENSE" "$resources_dir/LICENSE"
+cp "$root_dir/assets/AppIcon.icns" "$resources_dir/AppIcon.icns"
 mkdir -p "$resources_dir/docs" "$resources_dir/examples"
 cp "$root_dir"/docs/*.md "$resources_dir/docs/"
 cp "$root_dir"/examples/* "$resources_dir/examples/"
