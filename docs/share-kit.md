@@ -28,7 +28,7 @@ IME Safe AI CLI Terminal은 이 문제를 줄이기 위한 작은 오픈소스 m
 아직 v0.1이라 완전한 터미널 대체 앱은 아니지만, 같은 문제를 겪는 IME 사용자에게 당장 쓸 수 있는 우회 경로와 설계 방향을 공유합니다.
 
 Download:
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
 
 GitHub:
 https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal
@@ -50,7 +50,7 @@ IME Safe AI CLI Terminal is a small open-source macOS helper for safer IME input
 This is v0.1, not a full terminal replacement yet, but it provides a practical workaround and a design direction for IME-safe AI CLI input.
 
 Download:
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
 
 GitHub:
 https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal
@@ -62,7 +62,7 @@ Primary:
 
 ```text
 Download for macOS
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Secondary:

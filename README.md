@@ -36,33 +36,34 @@ The safest practical workaround is:
 That keeps the important interactive loop intact: approvals, plan mode, slash
 commands, interrupts, tool permissions, and multi-turn context.
 
-## Install
+## Download for macOS
 
-```bash
-brew install tmux
-git clone <this-repo-url>
-cd ai-cli-paste-shield
-./install.sh
-```
-
-This repository intentionally ships as a shell script. No Swift app, no binary,
-no Accessibility permission, no Input Monitoring permission.
-
-## Downloadable App
-
-For users who do not want to work from source, download the macOS app zip from
-the GitHub Releases page:
+Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
 ```
 
-Unzip it, open `IME Safe AI CLI Terminal.app`, then follow the guided prompts.
-The app is a lightweight wrapper around the same local scripts in this
-repository.
+Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
+and follow the guided flow. The app can check whether `tmux` is available and
+offer an install path if it is missing.
 
 The release app is ad-hoc signed but not notarized. macOS may show a first-run
 security warning for downloads outside the App Store.
+
+## Source Install
+
+Developers can also use the underlying script directly:
+
+```bash
+brew install tmux
+git clone https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal.git
+cd ime-safe-ai-cli-terminal
+./install.sh
+```
+
+The current helper does not request Accessibility permission or Input
+Monitoring permission.
 
 ## Guided Wizard
 
@@ -75,7 +76,7 @@ IME Safe AI CLI Terminal.app
 The wizard walks through:
 
 - checking `tmux`
-- choosing Claude, Codex, or Gemini
+- choosing Claude Code, Codex, Gemini CLI, or Qwen Code
 - opening the selected CLI inside a named tmux session
 - pasting your copied prompt into that session
 
@@ -186,6 +187,20 @@ See the long-term app direction in
 - space loss while composing Korean/Japanese/Chinese text
 - long prompt transfer
 - accidental early Enter during composition
+
+## Keyboard Hardware Check
+
+If the Space key also disappears while typing plain English text, for example
+`a a a a` becomes `aaaa`, this helper is probably not the right fix for that
+part of the problem. Check the external keyboard first:
+
+- try a direct wired connection instead of Bluetooth, a hub, or a dongle
+- press Space from the left, center, and right to find unstable spots
+- inspect the spacebar stabilizer, keycap, and switch if the keyboard allows it
+- compare with another keyboard if possible
+
+This app can reduce fragile IME input paths in AI CLIs, but it cannot repair a
+keyboard or connection that is not reliably sending Space.
 
 ## App Targets
 

@@ -16,7 +16,7 @@ means.
 The desired flow:
 
 1. Open the helper app.
-2. Choose Claude, Codex, or Gemini.
+2. Choose Claude Code, Codex, Gemini CLI, or Qwen Code.
 3. Type normally.
 4. The app handles Korean/English composition, spaces, Enter, Esc, arrows, and
    control keys safely.
@@ -26,7 +26,8 @@ The desired flow:
 ### 1. Focus-aware overlay for existing Terminal apps
 
 The helper watches the focused macOS app/window. If Terminal, iTerm2, Warp, or
-Ghostty is focused and the active session appears to be Claude, Codex, or Gemini,
+Ghostty is focused and the active session appears to be Claude Code, Codex,
+Gemini CLI, or Qwen Code,
 the helper can offer a safe input overlay.
 
 Pros:
@@ -51,7 +52,8 @@ Recommended use:
 
 ### 2. IME-safe AI terminal wrapper
 
-The app owns the terminal session. It launches Claude, Codex, or Gemini inside a
+The app owns the terminal session. It launches Claude Code, Codex, Gemini CLI,
+or Qwen Code inside a
 PTY, renders output, and handles input through native macOS text controls before
 sending committed text and control sequences to the PTY.
 

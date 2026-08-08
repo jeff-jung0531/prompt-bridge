@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -78,7 +78,7 @@ Safer Korean and IME input for AI CLIs
 Subheadline:
 
 ```text
-Use Claude Code, Codex, and Gemini CLI with fewer missing characters, duplicate inputs, and composition glitches on macOS.
+Use Claude Code, Codex, Gemini CLI, and Qwen Code with fewer missing characters, duplicate inputs, and composition glitches on macOS.
 ```
 
 Korean version:
