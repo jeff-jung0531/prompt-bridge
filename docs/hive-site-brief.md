@@ -120,6 +120,7 @@ Current v0.1 app shape:
 
 - A lightweight macOS `.app` wrapper around local helper scripts.
 - Opens app-style macOS prompts for target selection and actions.
+- Keeps the main UI simple: target picker, Start, Send Clipboard, Details.
 - Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.
 - Ad-hoc signed, not Apple-notarized yet.

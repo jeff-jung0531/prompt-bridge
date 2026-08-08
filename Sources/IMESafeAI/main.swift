@@ -71,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var targetPopup: NSPopUpButton!
     private var statusView: NSTextView!
     private var sendEnterCheckbox: NSButton!
+    private var detailsContainer: NSScrollView!
+    private var detailsButton: NSButton!
+    private var detailsHeightConstraint: NSLayoutConstraint!
+    private var detailsVisible = false
 
     private var resourceURL: URL {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -95,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 260),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -110,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Open and send input to multiple AI CLI tmux sessions safely.")
+        let subtitle = NSTextField(labelWithString: "Choose one AI CLI, start it safely, then send clipboard text when needed.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 13)
 
@@ -122,20 +126,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
         sendEnterCheckbox.state = .on
 
-        let openButton = NSButton(title: "Open / Attach Selected", target: self, action: #selector(openSelectedAction))
+        let openButton = NSButton(title: "Start", target: self, action: #selector(openSelectedAction))
         openButton.bezelStyle = .rounded
+        openButton.keyEquivalent = "\r"
 
-        let sendSelectedButton = NSButton(title: "Send to Selected", target: self, action: #selector(sendSelectedAction))
+        let sendSelectedButton = NSButton(title: "Send Clipboard", target: self, action: #selector(sendSelectedAction))
         sendSelectedButton.bezelStyle = .rounded
 
-        let sendAllButton = NSButton(title: "Send to All Active", target: self, action: #selector(sendAllAction))
-        sendAllButton.bezelStyle = .rounded
-
-        let refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refreshStatusAction))
-        refreshButton.bezelStyle = .rounded
-
-        let githubButton = NSButton(title: "GitHub", target: self, action: #selector(openGitHubAction))
-        githubButton.bezelStyle = .rounded
+        detailsButton = NSButton(title: "Details", target: self, action: #selector(toggleDetailsAction))
+        detailsButton.bezelStyle = .rounded
 
         statusView = NSTextView()
         statusView.isEditable = false
@@ -144,10 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusView.textColor = .labelColor
         statusView.backgroundColor = .textBackgroundColor
 
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
-        scroll.documentView = statusView
+        detailsContainer = NSScrollView()
+        detailsContainer.hasVerticalScroller = true
+        detailsContainer.borderType = .bezelBorder
+        detailsContainer.documentView = statusView
+        detailsContainer.isHidden = true
 
         let headerStack = NSStackView(views: [title, subtitle])
         headerStack.orientation = .vertical
@@ -160,12 +160,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         targetStack.alignment = .centerY
         targetStack.spacing = 10
 
-        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, sendAllButton, refreshButton, githubButton])
+        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, detailsButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let mainStack = NSStackView(views: [headerStack, targetStack, buttonStack, scroll])
+        let hint = NSTextField(labelWithString: "Write normally anywhere, copy text, then send it to the selected CLI session.")
+        hint.textColor = .secondaryLabelColor
+        hint.font = .systemFont(ofSize: 12)
+
+        let mainStack = NSStackView(views: [headerStack, targetStack, buttonStack, hint, detailsContainer])
         mainStack.translatesAutoresizingMaskIntoConstraints = false
         mainStack.orientation = .vertical
         mainStack.alignment = .leading
@@ -177,10 +181,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            scroll.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 210),
-            targetPopup.widthAnchor.constraint(equalToConstant: 170),
+            detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            targetPopup.widthAnchor.constraint(equalToConstant: 190),
         ])
+        detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
+        detailsHeightConstraint.isActive = true
     }
 
     private func showWindow() {
@@ -202,30 +207,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatus()
     }
 
-    @objc private func sendAllAction() {
-        let activeTargets = Target.all.filter { hasSession($0.session) }
-        if activeTargets.isEmpty {
-            appendStatus("No active Claude/Codex/Gemini tmux sessions found.")
-            return
-        }
-        for target in activeTargets {
-            sendClipboard(to: target)
-        }
-        refreshStatus()
-    }
-
     @objc private func refreshStatusAction() {
         refreshStatus()
     }
 
-    @objc private func openGitHubAction() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal")!)
+    @objc private func toggleDetailsAction() {
+        detailsVisible.toggle()
+        detailsContainer.isHidden = !detailsVisible
+        detailsButton.title = detailsVisible ? "Hide Details" : "Details"
+        detailsHeightConstraint.constant = detailsVisible ? 130 : 0
+        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 390 : 260))
+        refreshStatus()
     }
 
     private func openSession(_ target: Target) {
         guard ensureTmux() else { return }
         guard let commandParts = detectCLI(target) else {
             appendStatus("\(target.label): command not found. Install or log in first.")
+            showDetails()
             return
         }
 
@@ -239,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         """
         if runAppleScript(script) {
             appendStatus("Opened \(target.label) in tmux session '\(target.session)'.")
+            showDetails()
         }
     }
 
@@ -246,6 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ensureTmux() else { return }
         guard hasSession(target.session) else {
             appendStatus("\(target.label): no tmux session named '\(target.session)'. Open it first.")
+            showDetails()
             return
         }
 
@@ -262,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             appendStatus("\(target.label): send failed\n\(output)")
         }
+        showDetails()
     }
 
     private func refreshStatus() {
@@ -293,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if runShell("command -v brew").status != 0 {
             appendStatus("tmux is required, but Homebrew was not found. Install Homebrew first, then run: brew install tmux")
+            showDetails()
             return false
         }
 
@@ -311,7 +314,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         """
         _ = runAppleScript(script)
         appendStatus("A Terminal window is installing tmux. Try again after installation finishes.")
+        showDetails()
         return false
+    }
+
+    private func showDetails() {
+        guard !detailsVisible else { return }
+        detailsVisible = true
+        detailsContainer.isHidden = false
+        detailsButton.title = "Hide Details"
+        detailsHeightConstraint.constant = 130
+        window.setContentSize(NSSize(width: window.frame.width, height: 390))
     }
 
     private func detectCLI(_ target: Target) -> [String]? {

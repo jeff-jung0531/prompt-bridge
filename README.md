@@ -189,8 +189,9 @@ See the long-term app direction in
 
 ## App Targets
 
-The macOS helper detects installed commands and can manage separate tmux sessions
-for multiple AI CLI tools at once:
+The macOS helper keeps the main flow intentionally simple: choose one target,
+start it, then send clipboard text to that selected session. It also detects
+separate tmux sessions for multiple installed AI CLI tools in Details:
 
 - Claude Code
 - Codex
@@ -202,8 +203,8 @@ for multiple AI CLI tools at once:
 - Aider
 - Qwen Code
 
-Use `Send to Selected` for one target, or `Send to All Active` when several
-named sessions are already running.
+Use `Start` for the selected target and `Send Clipboard` when you want to
+transfer copied text.
 
 ## Non-goals
 
