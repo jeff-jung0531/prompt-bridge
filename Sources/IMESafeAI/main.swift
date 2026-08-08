@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let pathValue = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/ChatGPT.app/Contents/Resources"
 
     private var window: NSWindow!
-    private var targetPopup: NSPopUpButton!
+    private var targetButtons: [String: NSButton] = [:]
     private var statusView: NSTextView!
     private var sendEnterCheckbox: NSButton!
     private var detailsContainer: NSScrollView!
@@ -114,19 +114,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Choose one AI CLI, start it safely, then send clipboard text when needed.")
+        let subtitle = NSTextField(labelWithString: "Choose one or more AI CLIs, start them safely, then send clipboard text when needed.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 13)
-
-        targetPopup = NSPopUpButton()
-        targetPopup.addItems(withTitles: Target.all.map(\.label))
-        targetPopup.target = self
-        targetPopup.action = #selector(refreshStatusAction)
 
         sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
         sendEnterCheckbox.state = .on
 
-        let openButton = NSButton(title: "Start", target: self, action: #selector(openSelectedAction))
+        let openButton = NSButton(title: "Start Selected", target: self, action: #selector(openSelectedAction))
         openButton.bezelStyle = .rounded
         openButton.keyEquivalent = "\r"
 
@@ -154,18 +149,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         headerStack.alignment = .leading
         headerStack.spacing = 4
 
-        let targetLabel = NSTextField(labelWithString: "Target")
-        let targetStack = NSStackView(views: [targetLabel, targetPopup, sendEnterCheckbox])
-        targetStack.orientation = .horizontal
-        targetStack.alignment = .centerY
-        targetStack.spacing = 10
+        let targetLabel = NSTextField(labelWithString: "Targets")
+        targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
+
+        let targetGrid = NSGridView()
+        targetGrid.rowSpacing = 7
+        targetGrid.columnSpacing = 14
+        targetGrid.translatesAutoresizingMaskIntoConstraints = false
+
+        for rowIndex in 0..<3 {
+            var rowViews: [NSView] = []
+            for columnIndex in 0..<3 {
+                let index = rowIndex * 3 + columnIndex
+                if index < Target.all.count {
+                    let target = Target.all[index]
+                    let button = NSButton(checkboxWithTitle: target.label, target: self, action: #selector(refreshStatusAction))
+                    button.state = shouldSelectByDefault(target) ? .on : .off
+                    targetButtons[target.id] = button
+                    rowViews.append(button)
+                } else {
+                    rowViews.append(NSView())
+                }
+            }
+            targetGrid.addRow(with: rowViews)
+        }
+
+        let targetStack = NSStackView(views: [targetLabel, targetGrid, sendEnterCheckbox])
+        targetStack.orientation = .vertical
+        targetStack.alignment = .leading
+        targetStack.spacing = 8
 
         let buttonStack = NSStackView(views: [openButton, sendSelectedButton, detailsButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let hint = NSTextField(labelWithString: "Write normally anywhere, copy text, then send it to the selected CLI session.")
+        let hint = NSTextField(labelWithString: "Check one or more tools. Start opens sessions; Send Clipboard sends to all checked active sessions.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
@@ -182,10 +201,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
             detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-            targetPopup.widthAnchor.constraint(equalToConstant: 190),
         ])
         detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
         detailsHeightConstraint.isActive = true
+    }
+
+    private func shouldSelectByDefault(_ target: Target) -> Bool {
+        ["claude", "codex", "gemini"].contains(target.id) && detectCLI(target) != nil
     }
 
     private func showWindow() {
@@ -193,17 +215,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private var selectedTarget: Target {
-        Target.all[targetPopup.indexOfSelectedItem]
+    private var selectedTargets: [Target] {
+        Target.all.filter { targetButtons[$0.id]?.state == .on }
     }
 
     @objc private func openSelectedAction() {
-        openSession(selectedTarget)
+        let targets = selectedTargets
+        guard !targets.isEmpty else {
+            appendStatus("Select at least one target.")
+            showDetails()
+            return
+        }
+        for target in targets {
+            openSession(target)
+        }
         refreshStatus()
     }
 
     @objc private func sendSelectedAction() {
-        sendClipboard(to: selectedTarget)
+        let targets = selectedTargets
+        guard !targets.isEmpty else {
+            appendStatus("Select at least one target.")
+            showDetails()
+            return
+        }
+        for target in targets {
+            sendClipboard(to: target)
+        }
         refreshStatus()
     }
 
