@@ -25,30 +25,6 @@ struct Target {
             CommandCandidate(executable: "gemini", args: []),
             CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/gemini", args: []),
         ]),
-        Target(id: "cursor", label: "Cursor Agent", session: "cursor", candidates: [
-            CommandCandidate(executable: "cursor-agent", args: []),
-            CommandCandidate(executable: "agent", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/cursor-agent", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/agent", args: []),
-        ]),
-        Target(id: "amp", label: "Amp", session: "amp", candidates: [
-            CommandCandidate(executable: "amp", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/amp", args: []),
-        ]),
-        Target(id: "amazon-q", label: "Amazon Q / Kiro", session: "amazon-q", candidates: [
-            CommandCandidate(executable: "q", args: ["chat"]),
-            CommandCandidate(executable: "kiro", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/q", args: ["chat"]),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/kiro", args: []),
-        ]),
-        Target(id: "opencode", label: "OpenCode", session: "opencode", candidates: [
-            CommandCandidate(executable: "opencode", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/opencode", args: []),
-        ]),
-        Target(id: "aider", label: "Aider", session: "aider", candidates: [
-            CommandCandidate(executable: "aider", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/aider", args: []),
-        ]),
         Target(id: "qwen", label: "Qwen Code", session: "qwen", candidates: [
             CommandCandidate(executable: "qwen", args: []),
             CommandCandidate(executable: "qwen-code", args: []),
@@ -114,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Choose one or more AI CLIs, start them safely, then send clipboard text when needed.")
+        let subtitle = NSTextField(labelWithString: "Choose one or more IME-risk AI CLIs, start them safely, then send clipboard text when needed.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 13)
 
@@ -157,10 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         targetGrid.columnSpacing = 14
         targetGrid.translatesAutoresizingMaskIntoConstraints = false
 
-        for rowIndex in 0..<3 {
+        for rowIndex in 0..<2 {
             var rowViews: [NSView] = []
-            for columnIndex in 0..<3 {
-                let index = rowIndex * 3 + columnIndex
+            for columnIndex in 0..<2 {
+                let index = rowIndex * 2 + columnIndex
                 if index < Target.all.count {
                     let target = Target.all[index]
                     let button = NSButton(checkboxWithTitle: target.label, target: self, action: #selector(refreshStatusAction))
@@ -184,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let hint = NSTextField(labelWithString: "Check one or more tools. Start opens sessions; Send Clipboard sends to all checked active sessions.")
+        let hint = NSTextField(labelWithString: "Only tools with direct IME/input-risk evidence are included. Check several to handle them together.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
@@ -226,10 +202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showDetails()
             return
         }
+        var allSucceeded = true
         for target in targets {
-            openSession(target)
+            allSucceeded = openSession(target) && allSucceeded
         }
         refreshStatus()
+        if allSucceeded {
+            hideAfterSuccess()
+        }
     }
 
     @objc private func sendSelectedAction() {
@@ -239,10 +219,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showDetails()
             return
         }
+        var allSucceeded = true
         for target in targets {
-            sendClipboard(to: target)
+            allSucceeded = sendClipboard(to: target) && allSucceeded
         }
         refreshStatus()
+        if allSucceeded {
+            hideAfterSuccess()
+        }
     }
 
     @objc private func refreshStatusAction() {
@@ -258,12 +242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatus()
     }
 
-    private func openSession(_ target: Target) {
-        guard ensureTmux() else { return }
+    private func openSession(_ target: Target) -> Bool {
+        guard ensureTmux() else { return false }
         guard let commandParts = detectCLI(target) else {
             appendStatus("\(target.label): command not found. Install or log in first.")
             showDetails()
-            return
+            return false
         }
 
         let launchCommand = commandParts.map(shellQuote).joined(separator: " ")
@@ -276,16 +260,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         """
         if runAppleScript(script) {
             appendStatus("Opened \(target.label) in tmux session '\(target.session)'.")
-            showDetails()
+            return true
         }
+        return false
     }
 
-    private func sendClipboard(to target: Target) {
-        guard ensureTmux() else { return }
+    private func sendClipboard(to target: Target) -> Bool {
+        guard ensureTmux() else { return false }
         guard hasSession(target.session) else {
             appendStatus("\(target.label): no tmux session named '\(target.session)'. Open it first.")
             showDetails()
-            return
+            return false
         }
 
         let pasteScript = resourceURL.appendingPathComponent("ai-cli-paste").path
@@ -298,10 +283,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.status == 0 {
             appendStatus("\(target.label): \(output.isEmpty ? "sent clipboard" : output)")
+            return true
         } else {
             appendStatus("\(target.label): send failed\n\(output)")
+            showDetails()
+            return false
         }
-        showDetails()
     }
 
     private func refreshStatus() {
@@ -363,6 +350,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsButton.title = "Hide Details"
         detailsHeightConstraint.constant = 130
         window.setContentSize(NSSize(width: window.frame.width, height: 390))
+    }
+
+    private func hideAfterSuccess() {
+        window.orderOut(nil)
     }
 
     private func detectCLI(_ target: Target) -> [String]? {

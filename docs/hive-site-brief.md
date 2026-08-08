@@ -91,8 +91,7 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 
 - Guided Mac app flow
 - Checks and uses tmux automatically
-- Supports multiple AI CLI targets, including Claude Code, Codex, Gemini CLI,
-  Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, and Qwen Code
+- Supports Claude Code, Codex, Gemini CLI, and Qwen Code by default
 - Helps avoid fragile character-by-character IME input
 - Keeps interactive AI CLI sessions intact
 - No global keyboard interception by default
@@ -122,6 +121,7 @@ Current v0.1 app shape:
 - Opens app-style macOS prompts for target selection and actions.
 - Keeps the main UI simple: target checkboxes, Start Selected, Send Clipboard,
   Details.
+- Includes only major tools with direct IME/input-risk evidence by default.
 - Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.
 - Ad-hoc signed, not Apple-notarized yet.
@@ -166,7 +166,7 @@ Early open-source helper and design foundation for IME-safe AI CLI input.
 1. Hero: problem and download CTA
 2. Why this exists: AI CLI tools often mishandle IME composition
 3. How it works for users: open app, choose target, follow wizard
-4. Supported tools: Claude Code, Codex, Gemini CLI, Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, Qwen Code
+4. Supported tools: Claude Code, Codex, Gemini CLI, Qwen Code
 5. Download + GitHub
 6. Limitations and safety notes
 7. Future native app direction
