@@ -41,7 +41,7 @@ commands, interrupts, tool permissions, and multi-turn context.
 Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.12/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.17/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
@@ -222,8 +222,28 @@ If a selected tmux session is already active, the app leaves it running and does
 not open a second Terminal window for the same target.
 
 The app also shows visible proof in the target list: each target is marked as
-`(starting)`, `(active)`, `(not running)`, or `(missing)`, with a readiness
-summary above the checkboxes.
+`(active)`, `(not running)`, or `(missing)`, with a readiness summary above the
+checkboxes.
+
+When every selected session is active, the app enters an active state: `Send
+Clipboard` and `Stop Selected` are enabled, while `Start Selected` stays disabled
+as `Started`. Stopping selected sessions returns the app to the start-ready
+state.
+
+The active state behaves like a lightweight VPN-style status screen: it shows
+how long the selected sessions have been active and keeps the stop control
+available until the user ends the sessions.
+
+The main window is organized around this status panel first, so users can see
+whether the helper is ready or active without opening details.
+
+The app creates tmux sessions itself before opening Terminal attach windows, so
+the visible active state reflects the real session state instead of assuming
+Terminal successfully started it.
+
+The macOS app sends clipboard text explicitly. The shell script reads stdin only
+when `--stdin` is provided, so the GUI app still uses the macOS clipboard even
+when launched with `/dev/null` stdin.
 
 Watchlist, not included by default until there is clearer matching evidence:
 Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, GitHub Copilot CLI.

@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.12/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.17/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -127,8 +127,16 @@ Current v0.1 app shape:
   is disabled.
 - The target list visibly marks each tool as active, not running, or missing,
   with a readiness summary above the checkboxes.
-- While Terminal is creating the session, the app shows a starting state and
-  keeps Start Selected disabled instead of flipping back to clickable.
+- Active state exposes Send Clipboard and Stop Selected. Stopping sessions
+  returns the app to the start-ready state.
+- Active state should feel like a small VPN-style status screen, including
+  elapsed active duration and an always-available stop control.
+- Main UI now leads with a status panel: Ready or Active, plus active elapsed
+  duration.
+- Clipboard sending works from the GUI app because the paste helper falls back
+  to pbpaste unless `--stdin` is explicitly requested.
+- The app now creates tmux sessions directly and only then opens Terminal attach
+  windows, so active state reflects actual session creation.
 - Includes only major tools with direct IME/input-risk evidence by default.
 - Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.

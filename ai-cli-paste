@@ -104,7 +104,7 @@ fi
 if [ -n "$input_file" ]; then
   [ -f "$input_file" ] || die "file not found: $input_file"
   cp "$input_file" "$tmp_file"
-elif [ "$use_stdin" -eq 1 ] || [ ! -t 0 ]; then
+elif [ "$use_stdin" -eq 1 ]; then
   cat > "$tmp_file"
 else
   need pbpaste

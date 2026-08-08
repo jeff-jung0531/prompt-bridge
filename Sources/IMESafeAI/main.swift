@@ -47,17 +47,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var targetButtons: [String: NSButton] = [:]
     private var statusView: NSTextView!
     private var openButton: NSButton!
+    private var sendSelectedButton: NSButton!
+    private var stopSelectedButton: NSButton!
     private var summaryLabel: NSTextField!
+    private var modeLabel: NSTextField!
+    private var durationLabel: NSTextField!
+    private var modeDetailLabel: NSTextField!
     private var sendEnterCheckbox: NSButton!
     private var detailsContainer: NSScrollView!
     private var detailsButton: NSButton!
     private var detailsHeightConstraint: NSLayoutConstraint!
     private var detailsVisible = false
-    private var startingTargetIDs = Set<String>()
-    private var startingDeadline: Date?
+    private var activeSince: Date?
+    private var activeRefreshScheduled = false
+    private var eventMessages: [String] = []
+    private var commandCache: [String: [String]?] = [:]
+    private var sessionCreatedTimes: [String: Date] = [:]
 
     private var resourceURL: URL {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    }
+
+    private var workingDirectory: String {
+        let cwd = FileManager.default.currentDirectoryPath
+        if cwd != "/" {
+            return cwd
+        }
+        return NSHomeDirectory()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -79,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 340),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -94,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Choose the AI CLIs you use, start them once, then keep sending clipboard text to the active sessions.")
+        let subtitle = NSTextField(labelWithString: "Start once, keep selected AI CLI sessions active, and stop them when finished.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 13)
 
@@ -105,8 +121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openButton.bezelStyle = .rounded
         openButton.keyEquivalent = "\r"
 
-        let sendSelectedButton = NSButton(title: "Send Clipboard", target: self, action: #selector(sendSelectedAction))
+        sendSelectedButton = NSButton(title: "Send Clipboard", target: self, action: #selector(sendSelectedAction))
         sendSelectedButton.bezelStyle = .rounded
+
+        stopSelectedButton = NSButton(title: "Stop Selected", target: self, action: #selector(stopSelectedAction))
+        stopSelectedButton.bezelStyle = .rounded
 
         detailsButton = NSButton(title: "Details", target: self, action: #selector(toggleDetailsAction))
         detailsButton.bezelStyle = .rounded
@@ -128,6 +147,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         headerStack.orientation = .vertical
         headerStack.alignment = .leading
         headerStack.spacing = 4
+
+        modeLabel = NSTextField(labelWithString: "Ready")
+        modeLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+
+        durationLabel = NSTextField(labelWithString: "Not running")
+        durationLabel.font = .monospacedDigitSystemFont(ofSize: 28, weight: .semibold)
+
+        modeDetailLabel = NSTextField(labelWithString: "Select targets and start sessions.")
+        modeDetailLabel.textColor = .secondaryLabelColor
+        modeDetailLabel.font = .systemFont(ofSize: 12)
+
+        let modeStack = NSStackView(views: [modeLabel, durationLabel, modeDetailLabel])
+        modeStack.orientation = .vertical
+        modeStack.alignment = .leading
+        modeStack.spacing = 4
+
+        let modeBox = NSBox()
+        modeBox.title = ""
+        modeBox.boxType = .custom
+        modeBox.borderColor = .separatorColor
+        modeBox.fillColor = .controlBackgroundColor
+        modeBox.cornerRadius = 8
+        modeBox.contentViewMargins = NSSize(width: 14, height: 12)
+        modeBox.contentView?.addSubview(modeStack)
+        modeStack.translatesAutoresizingMaskIntoConstraints = false
+        if let boxContent = modeBox.contentView {
+            NSLayoutConstraint.activate([
+                modeStack.leadingAnchor.constraint(equalTo: boxContent.leadingAnchor),
+                modeStack.trailingAnchor.constraint(equalTo: boxContent.trailingAnchor),
+                modeStack.topAnchor.constraint(equalTo: boxContent.topAnchor),
+                modeStack.bottomAnchor.constraint(equalTo: boxContent.bottomAnchor),
+            ])
+        }
 
         let targetLabel = NSTextField(labelWithString: "Targets")
         targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
@@ -163,16 +215,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         targetStack.alignment = .leading
         targetStack.spacing = 8
 
-        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, detailsButton])
+        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, stopSelectedButton, detailsButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let hint = NSTextField(labelWithString: "Start Selected becomes Started once every selected session is active.")
+        let hint = NSTextField(labelWithString: "Active sessions stay running in the background until stopped.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
-        let mainStack = NSStackView(views: [headerStack, targetStack, buttonStack, hint, detailsContainer])
+        let mainStack = NSStackView(views: [headerStack, modeBox, targetStack, buttonStack, hint, detailsContainer])
         mainStack.translatesAutoresizingMaskIntoConstraints = false
         mainStack.orientation = .vertical
         mainStack.alignment = .leading
@@ -184,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+            modeBox.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
             detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
         ])
         detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
@@ -215,9 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allSucceeded = openSession(target) && allSucceeded
         }
         refreshStatus()
-        if allSucceeded {
-            scheduleStartupRefresh()
-        }
+        if allSucceeded { showWindow() }
     }
 
     @objc private func sendSelectedAction() {
@@ -233,8 +284,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshStatus()
         if allSucceeded {
-            hideAfterSuccess()
+            showWindow()
         }
+    }
+
+    @objc private func stopSelectedAction() {
+        let targets = selectedTargets
+        guard !targets.isEmpty else {
+            appendStatus("Select at least one target.")
+            showDetails()
+            return
+        }
+
+        let activeTargets = targets.filter { hasSession($0.session) }
+        guard !activeTargets.isEmpty else {
+            appendStatus("No selected active sessions to stop.")
+            refreshStatus()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Stop selected sessions?"
+        alert.informativeText = "This will terminate \(activeTargets.map(\.label).joined(separator: ", "))."
+        alert.addButton(withTitle: "Stop")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        for target in targets {
+            guard hasSession(target.session) else { continue }
+            let result = runShell("tmux kill-session -t \(shellQuote(target.session))")
+            if result.status == 0 {
+                sessionCreatedTimes.removeValue(forKey: target.session)
+                activeSince = nil
+                appendStatus("Stopped \(target.label) session '\(target.session)'.")
+            } else {
+                appendStatus("\(target.label): stop failed\n\(result.output.trimmingCharacters(in: .whitespacesAndNewlines))")
+                showDetails()
+            }
+        }
+        refreshStatus()
+        showWindow()
     }
 
     @objc private func refreshStatusAction() {
@@ -246,14 +335,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsContainer.isHidden = !detailsVisible
         detailsButton.title = detailsVisible ? "Hide Details" : "Details"
         detailsHeightConstraint.constant = detailsVisible ? 130 : 0
-        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 390 : 260))
+        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 520 : 340))
         refreshStatus()
     }
 
     private func openSession(_ target: Target) -> Bool {
         guard ensureTmux() else { return false }
         if hasSession(target.session) {
-            startingTargetIDs.remove(target.id)
             appendStatus("\(target.label): already active. You can keep using Send Clipboard.")
             return true
         }
@@ -265,20 +353,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let launchCommand = commandParts.map(shellQuote).joined(separator: " ")
-        let command = "tmux new-session -A -s \(shellQuote(target.session)) \(launchCommand)"
+        let createResult = runShell("tmux new-session -d -c \(shellQuote(workingDirectory)) -s \(shellQuote(target.session)) \(launchCommand)")
+        if createResult.status != 0 {
+            let output = createResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            appendStatus("\(target.label): could not start tmux session '\(target.session)'.\n\(output)")
+            showDetails()
+            return false
+        }
+
+        guard hasSession(target.session) else {
+            appendStatus("\(target.label): start command finished, but no active tmux session was created.")
+            showDetails()
+            return false
+        }
+
+        let command = "tmux attach-session -t \(shellQuote(target.session))"
         let script = """
         tell application "Terminal"
           activate
           do script "\(escapeAppleScript(command))"
         end tell
         """
-        if runAppleScript(script) {
-            startingTargetIDs.insert(target.id)
-            startingDeadline = Date().addingTimeInterval(15)
-            appendStatus("Starting \(target.label). Waiting for tmux session '\(target.session)' to become active.")
-            return true
+        if !runAppleScript(script) {
+            appendStatus("\(target.label): session is active, but the Terminal attach window could not be opened.")
+            showDetails()
         }
-        return false
+        appendStatus("Started \(target.label). Session '\(target.session)' is active.")
+        return true
     }
 
     private func sendClipboard(to target: Target) -> Bool {
@@ -315,7 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lines.append("")
 
         let sessions = tmuxSessions()
-        clearFinishedStartupStates(activeSessions: sessions)
+        sessionCreatedTimes = tmuxSessionCreatedTimes()
         updateVisibleTargetState(activeSessions: sessions)
         for target in Target.all {
             let cli = detectCLI(target) == nil ? "missing" : "OK"
@@ -328,6 +429,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lines.append("All tmux sessions: \(sessions.joined(separator: ", "))")
         }
 
+        if !eventMessages.isEmpty {
+            lines.append("")
+            lines.append("Events:")
+            lines.append(contentsOf: eventMessages.suffix(12))
+        }
+
         setStatus(lines.joined(separator: "\n"))
     }
 
@@ -338,8 +445,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let suffix: String
             if active {
                 suffix = " (active)"
-            } else if startingTargetIDs.contains(target.id) {
-                suffix = " (starting)"
             } else if commandFound {
                 suffix = " (not running)"
             } else {
@@ -352,50 +457,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if selected.isEmpty {
             summaryLabel.stringValue = "Select one or more targets."
             summaryLabel.textColor = .secondaryLabelColor
+            modeLabel.stringValue = "Ready"
+            modeLabel.textColor = .labelColor
+            durationLabel.stringValue = "Not running"
+            durationLabel.textColor = .secondaryLabelColor
+            modeDetailLabel.stringValue = "Select one or more targets to start protected sessions."
             openButton.title = "Start Selected"
             openButton.isEnabled = false
+            sendSelectedButton.isEnabled = false
+            stopSelectedButton.isEnabled = false
             return
         }
 
         let allSelectedActive = selected.allSatisfy { activeSessions.contains($0.session) }
-        let selectedStarting = selected.filter { startingTargetIDs.contains($0.id) }
-        if !selectedStarting.isEmpty {
-            summaryLabel.stringValue = "Starting: waiting for \(selectedStarting.count) selected session\(selectedStarting.count == 1 ? "" : "s")."
-            summaryLabel.textColor = .systemOrange
-            openButton.title = "Starting..."
-            openButton.isEnabled = false
-        } else if allSelectedActive {
-            summaryLabel.stringValue = "Ready: every selected session is active."
+        let anySelectedActive = selected.contains { activeSessions.contains($0.session) }
+        if allSelectedActive {
+            activeSince = selected
+                .compactMap { sessionCreatedTimes[$0.session] }
+                .min() ?? activeSince ?? Date()
+            let elapsed = activeSince.map(formatElapsed) ?? "00:00"
+            summaryLabel.stringValue = "Active for \(elapsed): clipboard sends to selected sessions."
             summaryLabel.textColor = .systemGreen
+            modeLabel.stringValue = "Active"
+            modeLabel.textColor = .systemGreen
+            durationLabel.stringValue = elapsed
+            durationLabel.textColor = .labelColor
+            modeDetailLabel.stringValue = "Selected sessions are running. Send clipboard text or stop them."
             openButton.title = "Started"
             openButton.isEnabled = false
+            sendSelectedButton.isEnabled = true
+            stopSelectedButton.isEnabled = true
+            scheduleActiveDurationRefresh()
         } else {
+            activeSince = nil
             let missingCount = selected.filter { !activeSessions.contains($0.session) }.count
             summaryLabel.stringValue = "Needs start: \(missingCount) selected session\(missingCount == 1 ? "" : "s") not running."
             summaryLabel.textColor = .systemOrange
+            modeLabel.stringValue = "Ready"
+            modeLabel.textColor = .labelColor
+            durationLabel.stringValue = "Not running"
+            durationLabel.textColor = .secondaryLabelColor
+            modeDetailLabel.stringValue = "Start selected targets to enter the active status screen."
             openButton.title = "Start Selected"
             openButton.isEnabled = true
+            sendSelectedButton.isEnabled = false
+            stopSelectedButton.isEnabled = anySelectedActive
         }
     }
 
-    private func clearFinishedStartupStates(activeSessions: [String]) {
-        for target in Target.all where activeSessions.contains(target.session) {
-            startingTargetIDs.remove(target.id)
-        }
-
-        if let deadline = startingDeadline, Date() > deadline {
-            startingTargetIDs.removeAll()
-            startingDeadline = nil
-        }
-    }
-
-    private func scheduleStartupRefresh() {
-        guard !startingTargetIDs.isEmpty else { return }
+    private func scheduleActiveDurationRefresh() {
+        guard activeSince != nil, !activeRefreshScheduled else { return }
+        activeRefreshScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             guard let self else { return }
-            self.refreshStatus()
-            self.scheduleStartupRefresh()
+            self.activeRefreshScheduled = false
+            guard let activeSince = self.activeSince else { return }
+            let elapsed = self.formatElapsed(from: activeSince)
+            self.durationLabel.stringValue = elapsed
+            self.summaryLabel.stringValue = "Active for \(elapsed): clipboard sends to selected sessions."
+            self.scheduleActiveDurationRefresh()
         }
+    }
+
+    private func formatElapsed(from start: Date) -> String {
+        let seconds = max(0, Int(Date().timeIntervalSince(start)))
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%02d:%02d", minutes, secs)
     }
 
     private func ensureTmux() -> Bool {
@@ -437,12 +569,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setContentSize(NSSize(width: window.frame.width, height: 390))
     }
 
-    private func hideAfterSuccess() {
-        window.orderOut(nil)
-    }
-
     private func detectCLI(_ target: Target) -> [String]? {
-        firstExistingCommand(target.candidates)
+        if let cached = commandCache[target.id] {
+            return cached
+        }
+        let command = firstExistingCommand(target.candidates)
+        commandCache[target.id] = command
+        return command
     }
 
     private func firstExistingCommand(_ candidates: [CommandCandidate]) -> [String]? {
@@ -475,6 +608,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .filter { !$0.isEmpty }
     }
 
+    private func tmuxSessionCreatedTimes() -> [String: Date] {
+        let result = runShell("tmux list-sessions -F '#S|#{session_created}'")
+        guard result.status == 0 else { return [:] }
+        var values: [String: Date] = [:]
+        for line in result.output.split(separator: "\n") {
+            let parts = line.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let timestamp = TimeInterval(parts[1]) else { continue }
+            values[parts[0]] = Date(timeIntervalSince1970: timestamp)
+        }
+        return values
+    }
+
     private func runAppleScript(_ source: String) -> Bool {
         var error: NSDictionary?
         NSAppleScript(source: source)?.executeAndReturnError(&error)
@@ -500,23 +645,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "LC_ALL": "en_US.UTF-8",
         ]
         let pipe = Pipe()
+        var outputData = Data()
         process.standardOutput = pipe
         process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty {
+                outputData.append(data)
+            }
+        }
         do {
             try process.run()
             process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let output = String(data: outputData, encoding: .utf8) ?? ""
             return ShellResult(status: process.terminationStatus, output: output)
         } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
             return ShellResult(status: 1, output: error.localizedDescription)
         }
     }
 
     private func appendStatus(_ message: String) {
-        let previous = statusView.string
-        let joined = previous.isEmpty ? message : previous + "\n\n" + message
-        setStatus(joined)
+        eventMessages.append(message)
+        if eventMessages.count > 20 {
+            eventMessages.removeFirst(eventMessages.count - 20)
+        }
+        refreshStatus()
     }
 
     private func setStatus(_ message: String) {
