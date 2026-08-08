@@ -9,9 +9,10 @@ input glitches in interactive AI CLIs. It sends completed text into an existing
 `tmux` session using bracketed paste, so the CLI receives a paste event instead
 of fragile character-by-character IME input.
 
-Important: this repository is the small fallback utility, not the final product
-shape. The better long-term app is an IME-safe AI terminal/input layer where
-users type normally and the app handles the fragile input path automatically.
+Important: this repository is the small fallback utility and early app shell,
+not the final product shape. The better long-term app is an IME-safe AI
+terminal/input layer where users type normally and the app handles the fragile
+input path automatically.
 See [`docs/focus-aware-input-design.md`](docs/focus-aware-input-design.md).
 
 ## Why
@@ -185,6 +186,24 @@ See the long-term app direction in
 - space loss while composing Korean/Japanese/Chinese text
 - long prompt transfer
 - accidental early Enter during composition
+
+## App Targets
+
+The macOS helper detects installed commands and can manage separate tmux sessions
+for multiple AI CLI tools at once:
+
+- Claude Code
+- Codex
+- Gemini CLI
+- Cursor Agent
+- Amp
+- Amazon Q / Kiro
+- OpenCode
+- Aider
+- Qwen Code
+
+Use `Send to Selected` for one target, or `Send to All Active` when several
+named sessions are already running.
 
 ## Non-goals
 

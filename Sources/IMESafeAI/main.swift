@@ -1,26 +1,76 @@
 import AppKit
 import Foundation
 
-enum Target: String {
-    case claude
-    case codex
-    case gemini
+struct CommandCandidate {
+    let executable: String
+    let args: [String]
+}
 
-    var label: String {
-        switch self {
-        case .claude: return "Claude Code"
-        case .codex: return "Codex"
-        case .gemini: return "Gemini CLI"
-        }
-    }
+struct Target {
+    let id: String
+    let label: String
+    let session: String
+    let candidates: [CommandCandidate]
 
-    var session: String { rawValue }
+    static let all: [Target] = [
+        Target(id: "claude", label: "Claude Code", session: "claude", candidates: [
+            CommandCandidate(executable: "claude", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/claude", args: []),
+        ]),
+        Target(id: "codex", label: "Codex", session: "codex", candidates: [
+            CommandCandidate(executable: "codex", args: []),
+            CommandCandidate(executable: "/Applications/ChatGPT.app/Contents/Resources/codex", args: []),
+        ]),
+        Target(id: "gemini", label: "Gemini CLI", session: "gemini", candidates: [
+            CommandCandidate(executable: "gemini", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/gemini", args: []),
+        ]),
+        Target(id: "cursor", label: "Cursor Agent", session: "cursor", candidates: [
+            CommandCandidate(executable: "cursor-agent", args: []),
+            CommandCandidate(executable: "agent", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/cursor-agent", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/agent", args: []),
+        ]),
+        Target(id: "amp", label: "Amp", session: "amp", candidates: [
+            CommandCandidate(executable: "amp", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/amp", args: []),
+        ]),
+        Target(id: "amazon-q", label: "Amazon Q / Kiro", session: "amazon-q", candidates: [
+            CommandCandidate(executable: "q", args: ["chat"]),
+            CommandCandidate(executable: "kiro", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/q", args: ["chat"]),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/kiro", args: []),
+        ]),
+        Target(id: "opencode", label: "OpenCode", session: "opencode", candidates: [
+            CommandCandidate(executable: "opencode", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/opencode", args: []),
+        ]),
+        Target(id: "aider", label: "Aider", session: "aider", candidates: [
+            CommandCandidate(executable: "aider", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/aider", args: []),
+        ]),
+        Target(id: "qwen", label: "Qwen Code", session: "qwen", candidates: [
+            CommandCandidate(executable: "qwen", args: []),
+            CommandCandidate(executable: "qwen-code", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/qwen", args: []),
+            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/qwen-code", args: []),
+        ]),
+    ]
+}
+
+struct ShellResult {
+    let status: Int32
+    let output: String
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var target: Target = .claude
     private let appName = "IME Safe AI CLI Terminal"
     private let pathValue = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/ChatGPT.app/Contents/Resources"
+
+    private var window: NSWindow!
+    private var targetPopup: NSPopUpButton!
+    private var statusView: NSTextView!
+    private var sendEnterCheckbox: NSButton!
 
     private var resourceURL: URL {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -28,13 +78,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        showMainMenu()
+        buildWindow()
+        showWindow()
+        refreshStatus()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        showMainMenu()
+        showWindow()
+        refreshStatus()
         return true
     }
 
@@ -42,98 +93,197 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    private func showMainMenu() {
-        let alert = NSAlert()
-        alert.messageText = appName
-        alert.informativeText = "Target: \(target.label)\n\nChoose what to do next."
-        alert.addButton(withTitle: "Open AI CLI")
-        alert.addButton(withTitle: "Send Clipboard")
-        alert.addButton(withTitle: "GitHub")
-        alert.addButton(withTitle: "Quit")
+    private func buildWindow() {
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = appName
+        window.center()
 
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            chooseTargetThenOpen()
-        case .alertSecondButtonReturn:
-            sendClipboard()
-        case .alertThirdButtonReturn:
-            openGitHub()
-        default:
-            NSApp.terminate(nil)
-        }
+        let content = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView = content
+
+        let title = NSTextField(labelWithString: appName)
+        title.font = .systemFont(ofSize: 20, weight: .semibold)
+
+        let subtitle = NSTextField(labelWithString: "Open and send input to multiple AI CLI tmux sessions safely.")
+        subtitle.textColor = .secondaryLabelColor
+        subtitle.font = .systemFont(ofSize: 13)
+
+        targetPopup = NSPopUpButton()
+        targetPopup.addItems(withTitles: Target.all.map(\.label))
+        targetPopup.target = self
+        targetPopup.action = #selector(refreshStatusAction)
+
+        sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
+        sendEnterCheckbox.state = .on
+
+        let openButton = NSButton(title: "Open / Attach Selected", target: self, action: #selector(openSelectedAction))
+        openButton.bezelStyle = .rounded
+
+        let sendSelectedButton = NSButton(title: "Send to Selected", target: self, action: #selector(sendSelectedAction))
+        sendSelectedButton.bezelStyle = .rounded
+
+        let sendAllButton = NSButton(title: "Send to All Active", target: self, action: #selector(sendAllAction))
+        sendAllButton.bezelStyle = .rounded
+
+        let refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refreshStatusAction))
+        refreshButton.bezelStyle = .rounded
+
+        let githubButton = NSButton(title: "GitHub", target: self, action: #selector(openGitHubAction))
+        githubButton.bezelStyle = .rounded
+
+        statusView = NSTextView()
+        statusView.isEditable = false
+        statusView.isSelectable = true
+        statusView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        statusView.textColor = .labelColor
+        statusView.backgroundColor = .textBackgroundColor
+
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.documentView = statusView
+
+        let headerStack = NSStackView(views: [title, subtitle])
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 4
+
+        let targetLabel = NSTextField(labelWithString: "Target")
+        let targetStack = NSStackView(views: [targetLabel, targetPopup, sendEnterCheckbox])
+        targetStack.orientation = .horizontal
+        targetStack.alignment = .centerY
+        targetStack.spacing = 10
+
+        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, sendAllButton, refreshButton, githubButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.spacing = 8
+
+        let mainStack = NSStackView(views: [headerStack, targetStack, buttonStack, scroll])
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+        mainStack.orientation = .vertical
+        mainStack.alignment = .leading
+        mainStack.spacing = 14
+        content.addSubview(mainStack)
+
+        NSLayoutConstraint.activate([
+            mainStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            mainStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
+            mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+            scroll.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 210),
+            targetPopup.widthAnchor.constraint(equalToConstant: 170),
+        ])
     }
 
-    private func chooseTargetThenOpen() {
-        let alert = NSAlert()
-        alert.messageText = "Choose AI CLI"
-        alert.informativeText = "Select the AI CLI session to open."
-        alert.addButton(withTitle: "Claude Code")
-        alert.addButton(withTitle: "Codex")
-        alert.addButton(withTitle: "Gemini CLI")
-        alert.addButton(withTitle: "Cancel")
+    private func showWindow() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            target = .claude
-        case .alertSecondButtonReturn:
-            target = .codex
-        case .alertThirdButtonReturn:
-            target = .gemini
-        default:
-            showMainMenu()
+    private var selectedTarget: Target {
+        Target.all[targetPopup.indexOfSelectedItem]
+    }
+
+    @objc private func openSelectedAction() {
+        openSession(selectedTarget)
+        refreshStatus()
+    }
+
+    @objc private func sendSelectedAction() {
+        sendClipboard(to: selectedTarget)
+        refreshStatus()
+    }
+
+    @objc private func sendAllAction() {
+        let activeTargets = Target.all.filter { hasSession($0.session) }
+        if activeTargets.isEmpty {
+            appendStatus("No active Claude/Codex/Gemini tmux sessions found.")
             return
         }
-
-        openSession()
-        showMainMenu()
+        for target in activeTargets {
+            sendClipboard(to: target)
+        }
+        refreshStatus()
     }
 
-    private func openSession() {
+    @objc private func refreshStatusAction() {
+        refreshStatus()
+    }
+
+    @objc private func openGitHubAction() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal")!)
+    }
+
+    private func openSession(_ target: Target) {
         guard ensureTmux() else { return }
-        guard let cli = detectCLI(target) else {
-            showInfo("\(target.label) was not found on this Mac. Install or log in to it first.")
+        guard let commandParts = detectCLI(target) else {
+            appendStatus("\(target.label): command not found. Install or log in first.")
             return
         }
 
-        let command = "tmux new-session -A -s \(shellQuote(target.session)) \(shellQuote(cli))"
+        let launchCommand = commandParts.map(shellQuote).joined(separator: " ")
+        let command = "tmux new-session -A -s \(shellQuote(target.session)) \(launchCommand)"
         let script = """
         tell application "Terminal"
           activate
           do script "\(escapeAppleScript(command))"
         end tell
         """
-        _ = runAppleScript(script)
-        showInfo("Opened \(target.label) in a tmux session named '\(target.session)'. Keep that Terminal window open.")
+        if runAppleScript(script) {
+            appendStatus("Opened \(target.label) in tmux session '\(target.session)'.")
+        }
     }
 
-    private func sendClipboard() {
+    private func sendClipboard(to target: Target) {
         guard ensureTmux() else { return }
-        guard runShell("tmux has-session -t \(shellQuote(target.session))").status == 0 else {
-            showInfo("No '\(target.session)' session is running yet. Open the AI CLI session first.")
+        guard hasSession(target.session) else {
+            appendStatus("\(target.label): no tmux session named '\(target.session)'. Open it first.")
             return
         }
-
-        let alert = NSAlert()
-        alert.messageText = "Send Clipboard"
-        alert.informativeText = "Send the current clipboard to '\(target.session)'?"
-        alert.addButton(withTitle: "Paste and Enter")
-        alert.addButton(withTitle: "Paste only")
-        alert.addButton(withTitle: "Cancel")
 
         let pasteScript = resourceURL.appendingPathComponent("ai-cli-paste").path
-        let result: ShellResult
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            result = runExecutable(pasteScript, args: [target.session, "--enter"])
-        case .alertSecondButtonReturn:
-            result = runExecutable(pasteScript, args: [target.session])
-        default:
-            showMainMenu()
-            return
+        var args = [target.session]
+        if sendEnterCheckbox.state == .on {
+            args.append("--enter")
         }
 
-        showInfo(result.output.isEmpty ? "Done." : result.output)
-        showMainMenu()
+        let result = runExecutable(pasteScript, args: args)
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.status == 0 {
+            appendStatus("\(target.label): \(output.isEmpty ? "sent clipboard" : output)")
+        } else {
+            appendStatus("\(target.label): send failed\n\(output)")
+        }
+    }
+
+    private func refreshStatus() {
+        var lines: [String] = []
+        lines.append("Status updated: \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium))")
+        lines.append("")
+        lines.append("tmux: \(runShell("command -v tmux").status == 0 ? "OK" : "missing")")
+        lines.append("")
+
+        let sessions = tmuxSessions()
+        for target in Target.all {
+            let cli = detectCLI(target) == nil ? "missing" : "OK"
+            let session = sessions.contains(target.session) ? "active" : "not running"
+            lines.append("\(target.label): command \(cli), session '\(target.session)' \(session)")
+        }
+
+        if !sessions.isEmpty {
+            lines.append("")
+            lines.append("All tmux sessions: \(sessions.joined(separator: ", "))")
+        }
+
+        setStatus(lines.joined(separator: "\n"))
     }
 
     private func ensureTmux() -> Bool {
@@ -142,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if runShell("command -v brew").status != 0 {
-            showInfo("tmux is required, but Homebrew was not found. Install Homebrew first, then run: brew install tmux")
+            appendStatus("tmux is required, but Homebrew was not found. Install Homebrew first, then run: brew install tmux")
             return false
         }
 
@@ -160,56 +310,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         end tell
         """
         _ = runAppleScript(script)
-        showInfo("A Terminal window is installing tmux. Open this app again after installation finishes.")
+        appendStatus("A Terminal window is installing tmux. Try again after installation finishes.")
         return false
     }
 
-    private func detectCLI(_ target: Target) -> String? {
-        switch target {
-        case .claude:
-            return firstExistingCommand(["claude", "\(NSHomeDirectory())/.local/bin/claude"])
-        case .codex:
-            return firstExistingCommand(["codex", "/Applications/ChatGPT.app/Contents/Resources/codex"])
-        case .gemini:
-            return firstExistingCommand(["gemini", "\(NSHomeDirectory())/.local/bin/gemini"])
-        }
+    private func detectCLI(_ target: Target) -> [String]? {
+        firstExistingCommand(target.candidates)
     }
 
-    private func firstExistingCommand(_ candidates: [String]) -> String? {
+    private func firstExistingCommand(_ candidates: [CommandCandidate]) -> [String]? {
         for candidate in candidates {
-            if candidate.contains("/") {
-                if FileManager.default.isExecutableFile(atPath: candidate) {
-                    return candidate
+            if candidate.executable.contains("/") {
+                if FileManager.default.isExecutableFile(atPath: candidate.executable) {
+                    return [candidate.executable] + candidate.args
                 }
             } else {
-                let result = runShell("command -v \(shellQuote(candidate))")
+                let result = runShell("command -v \(shellQuote(candidate.executable))")
                 if result.status == 0 {
                     let value = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !value.isEmpty { return value }
+                    if !value.isEmpty { return [value] + candidate.args }
                 }
             }
         }
         return nil
     }
 
-    private func openGitHub() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal")!)
-        showMainMenu()
+    private func hasSession(_ name: String) -> Bool {
+        runShell("tmux has-session -t \(shellQuote(name))").status == 0
     }
 
-    private func showInfo(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = appName
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+    private func tmuxSessions() -> [String] {
+        let result = runShell("tmux list-sessions -F '#S'")
+        guard result.status == 0 else { return [] }
+        return result.output
+            .split(separator: "\n")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     private func runAppleScript(_ source: String) -> Bool {
         var error: NSDictionary?
         NSAppleScript(source: source)?.executeAndReturnError(&error)
         if let error {
-            showInfo("AppleScript error: \(error)")
+            appendStatus("AppleScript error: \(error)")
             return false
         }
         return true
@@ -243,6 +386,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func appendStatus(_ message: String) {
+        let previous = statusView.string
+        let joined = previous.isEmpty ? message : previous + "\n\n" + message
+        setStatus(joined)
+    }
+
+    private func setStatus(_ message: String) {
+        statusView.string = message
+        statusView.scrollToEndOfDocument(nil)
+    }
+
     private func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
@@ -251,11 +405,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         value.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
-}
-
-struct ShellResult {
-    let status: Int32
-    let output: String
 }
 
 let app = NSApplication.shared

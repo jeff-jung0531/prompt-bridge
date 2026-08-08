@@ -11,13 +11,13 @@ IME Safe AI CLI Terminal
 Short description:
 
 ```text
-A macOS helper app for safer IME input in Claude Code, Codex, and Gemini CLI.
+A macOS helper app for safer IME input in major AI CLI tools.
 ```
 
 Plain-language Korean description:
 
 ```text
-Claude Code, Codex, Gemini CLI에서 한글/IME 입력이 누락되거나 중복되거나 한영 전환 중 꼬이는 문제를 줄여주는 macOS용 보조 앱입니다.
+Claude Code, Codex, Gemini CLI 등 주요 AI CLI에서 한글/IME 입력이 누락되거나 중복되거나 한영 전환 중 꼬이는 문제를 줄여주는 macOS용 보조 앱입니다.
 ```
 
 Important positioning:
@@ -91,7 +91,8 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 
 - Guided Mac app flow
 - Checks and uses tmux automatically
-- Supports Claude Code, Codex, and Gemini CLI targets
+- Supports multiple AI CLI targets, including Claude Code, Codex, Gemini CLI,
+  Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, and Qwen Code
 - Helps avoid fragile character-by-character IME input
 - Keeps interactive AI CLI sessions intact
 - No global keyboard interception by default
@@ -163,7 +164,7 @@ Early open-source helper and design foundation for IME-safe AI CLI input.
 1. Hero: problem and download CTA
 2. Why this exists: AI CLI tools often mishandle IME composition
 3. How it works for users: open app, choose target, follow wizard
-4. Supported tools: Claude Code, Codex, Gemini CLI
+4. Supported tools: Claude Code, Codex, Gemini CLI, Cursor Agent, Amp, Amazon Q/Kiro, OpenCode, Aider, Qwen Code
 5. Download + GitHub
 6. Limitations and safety notes
 7. Future native app direction
