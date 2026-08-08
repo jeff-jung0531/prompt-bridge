@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.8/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.9/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -121,6 +121,8 @@ Current v0.1 app shape:
 - Opens app-style macOS prompts for target selection and actions.
 - Keeps the main UI simple: target checkboxes, Start Selected, Send Clipboard,
   Details.
+- Start Selected is one-time setup per target; already active sessions stay
+  active and are not opened again.
 - Includes only major tools with direct IME/input-risk evidence by default.
 - Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.

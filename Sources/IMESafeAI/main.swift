@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Choose one or more IME-risk AI CLIs, start them safely, then send clipboard text when needed.")
+        let subtitle = NSTextField(labelWithString: "Choose the AI CLIs you use, start them once, then keep sending clipboard text to the active sessions.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 13)
 
@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        let hint = NSTextField(labelWithString: "Only tools with direct IME/input-risk evidence are included. Check several to handle them together.")
+        let hint = NSTextField(labelWithString: "Start Selected is a one-time setup for each session. Already active sessions stay active and are not opened again.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
@@ -244,6 +244,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSession(_ target: Target) -> Bool {
         guard ensureTmux() else { return false }
+        if hasSession(target.session) {
+            appendStatus("\(target.label): already active. You can keep using Send Clipboard.")
+            return true
+        }
+
         guard let commandParts = detectCLI(target) else {
             appendStatus("\(target.label): command not found. Install or log in first.")
             showDetails()
