@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/latest/download/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.6/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
