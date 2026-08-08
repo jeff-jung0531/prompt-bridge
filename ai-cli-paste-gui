@@ -4,6 +4,14 @@ set -euo pipefail
 APP_NAME="IME Safe AI CLI Terminal"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PASTE_SCRIPT="$SCRIPT_DIR/ai-cli-paste"
+LOG_DIR="$HOME/Library/Logs/IME Safe AI CLI Terminal"
+LOG_FILE="$LOG_DIR/app.log"
+
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_FILE" 2>&1
+
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+printf '\n[%s] launch PATH=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$PATH"
 
 target="claude"
 session="claude"
@@ -13,7 +21,7 @@ has() {
 }
 
 alert() {
-  osascript <<OSA >/dev/null
+  osascript <<OSA >/dev/null || true
 display alert "$APP_NAME" message "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')" as informational
 OSA
 }
@@ -51,7 +59,9 @@ terminal_escape() {
 detect_cli() {
   case "$1" in
     claude)
-      command -v claude 2>/dev/null || true
+      command -v claude 2>/dev/null || {
+        [ -x "$HOME/.local/bin/claude" ] && printf '%s\n' "$HOME/.local/bin/claude"
+      } || true
       ;;
     codex)
       command -v codex 2>/dev/null || {
@@ -59,7 +69,9 @@ detect_cli() {
       }
       ;;
     gemini)
-      command -v gemini 2>/dev/null || true
+      command -v gemini 2>/dev/null || {
+        [ -x "$HOME/.local/bin/gemini" ] && printf '%s\n' "$HOME/.local/bin/gemini"
+      } || true
       ;;
   esac
 }
@@ -176,6 +188,7 @@ open_github() {
 main_menu() {
   while true; do
     choice="$(choose_button "Target: $target\n\nChoose what to do next." '"Quit", "GitHub", "Send Clipboard", "Open AI CLI"' "Open AI CLI")"
+    printf '[%s] menu choice=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${choice:-<empty>}"
     case "$choice" in
       "Open AI CLI")
         choose_target && open_session || true
@@ -185,6 +198,10 @@ main_menu() {
         ;;
       "GitHub")
         open_github
+        ;;
+      "")
+        alert "The app could not show its menu or the dialog was dismissed. Please try opening it again. Log: $LOG_FILE"
+        exit 0
         ;;
       *)
         exit 0

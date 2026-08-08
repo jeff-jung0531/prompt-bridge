@@ -5,6 +5,8 @@ APP_NAME="AI CLI Paste Shield"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PASTE_SCRIPT="$SCRIPT_DIR/ai-cli-paste"
 
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
 target="claude"
 session="claude"
 
