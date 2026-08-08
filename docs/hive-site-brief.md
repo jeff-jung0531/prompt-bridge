@@ -112,7 +112,8 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 Current v0.1 app shape:
 
 - A lightweight macOS `.app` wrapper around local helper scripts.
-- Opens a guided Terminal-based wizard.
+- Opens app-style macOS prompts for target selection and actions.
+- Opens Terminal only when launching the selected AI CLI session.
 - Uses local-only scripts and tmux.
 - Ad-hoc signed, not Apple-notarized yet.
 

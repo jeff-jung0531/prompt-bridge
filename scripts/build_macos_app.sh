@@ -48,21 +48,15 @@ cat > "$macos_dir/launcher" <<'LAUNCHER'
 set -euo pipefail
 
 app_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-wizard="$app_root/Contents/Resources/ai-cli-paste-wizard"
+gui="$app_root/Contents/Resources/ai-cli-paste-gui"
 
-escaped_wizard="$(printf '%s' "$wizard" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-
-osascript >/dev/null <<OSA
-tell application "Terminal"
-  activate
-  do script "\"$escaped_wizard\""
-end tell
-OSA
+exec "$gui"
 LAUNCHER
 
 chmod +x "$macos_dir/launcher"
 
 cp "$root_dir/ai-cli-paste" "$resources_dir/ai-cli-paste"
+cp "$root_dir/ai-cli-paste-gui" "$resources_dir/ai-cli-paste-gui"
 cp "$root_dir/ai-cli-paste-wizard" "$resources_dir/ai-cli-paste-wizard"
 cp "$root_dir/install.sh" "$resources_dir/install.sh"
 cp "$root_dir/README.md" "$resources_dir/README.md"
@@ -70,7 +64,7 @@ cp "$root_dir/LICENSE" "$resources_dir/LICENSE"
 mkdir -p "$resources_dir/docs" "$resources_dir/examples"
 cp "$root_dir"/docs/*.md "$resources_dir/docs/"
 cp "$root_dir"/examples/* "$resources_dir/examples/"
-chmod +x "$resources_dir/ai-cli-paste" "$resources_dir/ai-cli-paste-wizard" "$resources_dir/install.sh"
+chmod +x "$resources_dir/ai-cli-paste" "$resources_dir/ai-cli-paste-gui" "$resources_dir/ai-cli-paste-wizard" "$resources_dir/install.sh"
 
 if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$app_dir"

@@ -1,4 +1,4 @@
-# AI CLI Paste Shield
+# IME Safe AI CLI Terminal
 
 한국어: 이 도구는 macOS의 전역 키보드 문제를 고치는 프로그램이 아닙니다.
 Codex, Claude Code, Gemini CLI 같은 대화형 AI CLI 앞에서 CJK 입력이 깨질 때,
@@ -56,7 +56,7 @@ the GitHub Releases page:
 ime-safe-ai-cli-terminal-macos.zip
 ```
 
-Unzip it, open `IME Safe AI CLI Terminal.app`, then follow the guided wizard.
+Unzip it, open `IME Safe AI CLI Terminal.app`, then follow the guided prompts.
 The app is a lightweight wrapper around the same local scripts in this
 repository.
 
@@ -68,7 +68,7 @@ security warning for downloads outside the App Store.
 For non-developers, double-click:
 
 ```text
-AI CLI Paste Shield.command
+IME Safe AI CLI Terminal.app
 ```
 
 The wizard walks through:
