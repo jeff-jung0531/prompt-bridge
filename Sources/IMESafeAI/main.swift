@@ -42,6 +42,8 @@ struct ShellResult {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appName = "IME Safe AI CLI Terminal"
     private let pathValue = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/ChatGPT.app/Contents/Resources"
+    private let workingDirectoryDefaultsKey = "workingDirectory"
+    private let hideAfterActionDefaultsKey = "hideAfterSuccessfulAction"
 
     private var window: NSWindow!
     private var targetButtons: [String: NSButton] = [:]
@@ -54,6 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var durationLabel: NSTextField!
     private var modeDetailLabel: NSTextField!
     private var sendEnterCheckbox: NSButton!
+    private var hideAfterActionCheckbox: NSButton!
+    private var workingDirectoryLabel: NSTextField!
     private var detailsContainer: NSScrollView!
     private var detailsButton: NSButton!
     private var detailsHeightConstraint: NSLayoutConstraint!
@@ -69,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var workingDirectory: String {
+        if let savedPath = UserDefaults.standard.string(forKey: workingDirectoryDefaultsKey),
+           isDirectory(savedPath) {
+            return savedPath
+        }
+
         let cwd = FileManager.default.currentDirectoryPath
         if cwd != "/" {
             return cwd
@@ -95,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 410),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -116,6 +125,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
         sendEnterCheckbox.state = .on
+
+        hideAfterActionCheckbox = NSButton(checkboxWithTitle: "Return focus after Start/Send", target: nil, action: nil)
+        hideAfterActionCheckbox.state = UserDefaults.standard.object(forKey: hideAfterActionDefaultsKey) == nil
+            ? .on
+            : (UserDefaults.standard.bool(forKey: hideAfterActionDefaultsKey) ? .on : .off)
+        hideAfterActionCheckbox.target = self
+        hideAfterActionCheckbox.action = #selector(toggleHideAfterAction)
 
         openButton = NSButton(title: "Start Selected", target: self, action: #selector(openSelectedAction))
         openButton.bezelStyle = .rounded
@@ -184,6 +200,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let targetLabel = NSTextField(labelWithString: "Targets")
         targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
 
+        let folderTitle = NSTextField(labelWithString: "Working Folder")
+        folderTitle.font = .systemFont(ofSize: 13, weight: .medium)
+
+        workingDirectoryLabel = NSTextField(labelWithString: "")
+        workingDirectoryLabel.lineBreakMode = .byTruncatingMiddle
+        workingDirectoryLabel.textColor = .secondaryLabelColor
+        workingDirectoryLabel.font = .systemFont(ofSize: 12)
+        updateWorkingDirectoryLabel()
+
+        let chooseFolderButton = NSButton(title: "Choose Folder...", target: self, action: #selector(chooseWorkingDirectoryAction))
+        chooseFolderButton.bezelStyle = .rounded
+
+        let folderRow = NSStackView(views: [workingDirectoryLabel, chooseFolderButton])
+        folderRow.orientation = .horizontal
+        folderRow.alignment = .centerY
+        folderRow.spacing = 8
+        folderRow.distribution = .fill
+        workingDirectoryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let folderStack = NSStackView(views: [folderTitle, folderRow])
+        folderStack.orientation = .vertical
+        folderStack.alignment = .leading
+        folderStack.spacing = 6
+
         summaryLabel = NSTextField(labelWithString: "Checking sessions...")
         summaryLabel.textColor = .secondaryLabelColor
         summaryLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -210,7 +250,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             targetGrid.addRow(with: rowViews)
         }
 
-        let targetStack = NSStackView(views: [targetLabel, summaryLabel, targetGrid, sendEnterCheckbox])
+        let optionStack = NSStackView(views: [sendEnterCheckbox, hideAfterActionCheckbox])
+        optionStack.orientation = .vertical
+        optionStack.alignment = .leading
+        optionStack.spacing = 4
+
+        let targetStack = NSStackView(views: [folderStack, targetLabel, summaryLabel, targetGrid, optionStack])
         targetStack.orientation = .vertical
         targetStack.alignment = .leading
         targetStack.spacing = 8
@@ -237,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
             modeBox.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            folderRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
             detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
         ])
         detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
@@ -268,7 +314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             allSucceeded = openSession(target) && allSucceeded
         }
         refreshStatus()
-        if allSucceeded { showWindow() }
+        if allSucceeded {
+            returnFocusAfterSuccessfulAction()
+        } else {
+            showWindow()
+        }
     }
 
     @objc private func sendSelectedAction() {
@@ -284,6 +334,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         refreshStatus()
         if allSucceeded {
+            returnFocusAfterSuccessfulAction()
+        } else {
             showWindow()
         }
     }
@@ -335,8 +387,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsContainer.isHidden = !detailsVisible
         detailsButton.title = detailsVisible ? "Hide Details" : "Details"
         detailsHeightConstraint.constant = detailsVisible ? 130 : 0
-        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 520 : 340))
+        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 560 : 410))
         refreshStatus()
+    }
+
+    @objc private func chooseWorkingDirectoryAction() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: workingDirectory)
+        panel.prompt = "Use Folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        UserDefaults.standard.set(url.path, forKey: workingDirectoryDefaultsKey)
+        updateWorkingDirectoryLabel()
+        appendStatus("Working folder set to \(url.path). New sessions will start there.")
+    }
+
+    @objc private func toggleHideAfterAction() {
+        UserDefaults.standard.set(hideAfterActionCheckbox.state == .on, forKey: hideAfterActionDefaultsKey)
     }
 
     private func openSession(_ target: Target) -> Bool {
@@ -428,6 +498,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lines.append("")
             lines.append("All tmux sessions: \(sessions.joined(separator: ", "))")
         }
+
+        lines.append("")
+        lines.append("Working folder: \(workingDirectory)")
 
         if !eventMessages.isEmpty {
             lines.append("")
@@ -566,7 +639,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsContainer.isHidden = false
         detailsButton.title = "Hide Details"
         detailsHeightConstraint.constant = 130
-        window.setContentSize(NSSize(width: window.frame.width, height: 390))
+        window.setContentSize(NSSize(width: window.frame.width, height: 560))
+    }
+
+    private func returnFocusAfterSuccessfulAction() {
+        guard hideAfterActionCheckbox.state == .on else {
+            showWindow()
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            self.window.orderOut(nil)
+            NSApp.hide(nil)
+        }
+    }
+
+    private func updateWorkingDirectoryLabel() {
+        guard let workingDirectoryLabel else { return }
+        workingDirectoryLabel.stringValue = (workingDirectory as NSString).abbreviatingWithTildeInPath
+    }
+
+    private func isDirectory(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     private func detectCLI(_ target: Target) -> [String]? {
@@ -648,20 +744,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var outputData = Data()
         process.standardOutput = pipe
         process.standardError = pipe
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if !data.isEmpty {
-                outputData.append(data)
-            }
-        }
         do {
             try process.run()
+            outputData = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            pipe.fileHandleForReading.readabilityHandler = nil
             let output = String(data: outputData, encoding: .utf8) ?? ""
             return ShellResult(status: process.terminationStatus, output: output)
         } catch {
-            pipe.fileHandleForReading.readabilityHandler = nil
             return ShellResult(status: 1, output: error.localizedDescription)
         }
     }

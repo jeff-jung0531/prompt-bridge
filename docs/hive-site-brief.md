@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.17/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.18/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -91,8 +91,10 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 
 - Guided Mac app flow
 - Checks and uses tmux automatically
+- Lets users choose the working folder for new CLI sessions
 - Supports Claude Code, Codex, Gemini CLI, and Qwen Code by default
 - Helps avoid fragile character-by-character IME input
+- Returns focus to Terminal after Start/Send by default
 - Keeps interactive AI CLI sessions intact
 - No global keyboard interception by default
 - No Accessibility or Input Monitoring permission required for the current helper
@@ -118,6 +120,9 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 Current v0.1 app shape:
 
 - A lightweight macOS `.app` wrapper around local helper scripts.
+- Users can select multiple installed AI CLI targets and start them together.
+- New sessions start in the chosen working folder, not Finder's `/` launch directory.
+- After successful Start or Send, the app hides by default so Terminal keeps focus.
 - Opens app-style macOS prompts for target selection and actions.
 - Keeps the main UI simple: target checkboxes, Start Selected, Send Clipboard,
   Details.

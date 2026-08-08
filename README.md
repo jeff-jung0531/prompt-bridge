@@ -41,12 +41,16 @@ commands, interrupts, tool permissions, and multi-turn context.
 Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.17/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.18/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
 and follow the guided flow. The app can check whether `tmux` is available and
 offer an install path if it is missing.
+
+The app lets you choose the working folder for new AI CLI sessions. After a
+successful Start or Send, it returns focus to Terminal by default so it does not
+sit in front of your typing session.
 
 The release app is ad-hoc signed but not notarized. macOS may show a first-run
 security warning for downloads outside the App Store.
@@ -76,9 +80,11 @@ IME Safe AI CLI Terminal.app
 The wizard walks through:
 
 - checking `tmux`
+- choosing the folder where new CLI sessions should start
 - choosing Claude Code, Codex, Gemini CLI, or Qwen Code
 - opening the selected CLI inside a named tmux session
 - pasting your copied prompt into that session
+- returning focus to Terminal after Start or Send
 
 If `tmux` is missing, the wizard shows an `Install tmux` button and installs it
 with Homebrew. If `tmux` is already installed, it skips that step automatically.
