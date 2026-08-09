@@ -39,6 +39,12 @@ struct ShellResult {
     let output: String
 }
 
+struct InputStats {
+    let characters: Int
+    let bytes: Int
+    let lines: Int
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appName = "IME Safe AI CLI Terminal"
     private let pathValue = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/ChatGPT.app/Contents/Resources"
@@ -55,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var modeLabel: NSTextField!
     private var durationLabel: NSTextField!
     private var modeDetailLabel: NSTextField!
+    private var protectionLabel: NSTextField!
     private var sendEnterCheckbox: NSButton!
     private var hideAfterActionCheckbox: NSButton!
     private var workingDirectoryLabel: NSTextField!
@@ -69,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMessages: [String] = []
     private var commandCache: [String: [String]?] = [:]
     private var sessionCreatedTimes: [String: Date] = [:]
+    private var protectedSendCount = 0
+    private var protectedCharacterCount = 0
+    private var protectedByteCount = 0
+    private var protectedLineCount = 0
 
     private var resourceURL: URL {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -106,17 +117,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 410),
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 470),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = appName
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .clear
         window.center()
+
+        let backdrop = NSVisualEffectView()
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.material = .underWindowBackground
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
 
         let content = NSView()
         content.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView = content
+        window.contentView = backdrop
+        backdrop.addSubview(content)
 
         let title = NSTextField(labelWithString: appName)
         title.font = .systemFont(ofSize: 20, weight: .semibold)
@@ -176,28 +197,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modeDetailLabel.textColor = .secondaryLabelColor
         modeDetailLabel.font = .systemFont(ofSize: 12)
 
-        let modeStack = NSStackView(views: [modeLabel, durationLabel, modeDetailLabel])
+        protectionLabel = NSTextField(labelWithString: "Protected: 0 sends")
+        protectionLabel.textColor = .secondaryLabelColor
+        protectionLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+
+        let modeStack = NSStackView(views: [modeLabel, durationLabel, modeDetailLabel, protectionLabel])
         modeStack.orientation = .vertical
         modeStack.alignment = .leading
         modeStack.spacing = 4
 
-        let modeBox = NSBox()
-        modeBox.title = ""
-        modeBox.boxType = .custom
-        modeBox.borderColor = .separatorColor
-        modeBox.fillColor = .controlBackgroundColor
-        modeBox.cornerRadius = 8
-        modeBox.contentViewMargins = NSSize(width: 14, height: 12)
-        modeBox.contentView?.addSubview(modeStack)
-        modeStack.translatesAutoresizingMaskIntoConstraints = false
-        if let boxContent = modeBox.contentView {
-            NSLayoutConstraint.activate([
-                modeStack.leadingAnchor.constraint(equalTo: boxContent.leadingAnchor),
-                modeStack.trailingAnchor.constraint(equalTo: boxContent.trailingAnchor),
-                modeStack.topAnchor.constraint(equalTo: boxContent.topAnchor),
-                modeStack.bottomAnchor.constraint(equalTo: boxContent.bottomAnchor),
-            ])
-        }
+        let modeCard = makeGlassCard(containing: modeStack, margins: NSSize(width: 16, height: 14))
 
         let targetLabel = NSTextField(labelWithString: "Targets")
         targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
@@ -261,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         targetStack.orientation = .vertical
         targetStack.alignment = .leading
         targetStack.spacing = 8
+        let targetCard = makeGlassCard(containing: targetStack, margins: NSSize(width: 16, height: 14))
 
         let buttonStack = NSStackView(views: [openButton, sendSelectedButton, stopSelectedButton, detailsButton])
         buttonStack.orientation = .horizontal
@@ -271,7 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 12)
 
-        let mainStack = NSStackView(views: [headerStack, modeBox, targetStack, buttonStack, hint, detailsContainer])
+        let mainStack = NSStackView(views: [headerStack, modeCard, targetCard, buttonStack, hint, detailsContainer])
         mainStack.translatesAutoresizingMaskIntoConstraints = false
         mainStack.orientation = .vertical
         mainStack.alignment = .leading
@@ -279,16 +289,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         content.addSubview(mainStack)
 
         NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 0),
+            content.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: 0),
+            content.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 0),
+            content.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor, constant: 0),
             mainStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             mainStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            modeBox.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-            folderRow.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            modeCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            targetCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
+            folderRow.widthAnchor.constraint(equalTo: targetStack.widthAnchor),
             detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
         ])
         detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
         detailsHeightConstraint.isActive = true
+    }
+
+    private func makeGlassCard(containing view: NSView, margins: NSSize) -> NSVisualEffectView {
+        let card = NSVisualEffectView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.material = .popover
+        card.blendingMode = .withinWindow
+        card.state = .active
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 14
+        card.layer?.cornerCurve = .continuous
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+
+        view.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: margins.width),
+            view.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -margins.width),
+            view.topAnchor.constraint(equalTo: card.topAnchor, constant: margins.height),
+            view.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -margins.height),
+        ])
+        return card
     }
 
     private func shouldSelectByDefault(_ target: Target) -> Bool {
@@ -338,8 +376,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         var allSucceeded = true
+        let inputStats = currentClipboardStats()
         for target in targets {
-            allSucceeded = sendClipboard(to: target) && allSucceeded
+            let succeeded = sendClipboard(to: target)
+            if succeeded {
+                recordProtectedSend(inputStats)
+            }
+            allSucceeded = succeeded && allSucceeded
         }
         refreshStatus()
         if allSucceeded {
@@ -397,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsContainer.isHidden = !detailsVisible
         detailsButton.title = detailsVisible ? "Hide Details" : "Details"
         detailsHeightConstraint.constant = detailsVisible ? 130 : 0
-        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 560 : 410))
+        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 640 : 470))
         refreshStatus()
     }
 
@@ -511,6 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         lines.append("")
         lines.append("Working folder: \(workingDirectory)")
+        lines.append(protectionSummary(includeBytes: true))
 
         if !eventMessages.isEmpty {
             lines.append("")
@@ -547,6 +591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationLabel.stringValue = "Not running"
             durationLabel.textColor = .secondaryLabelColor
             modeDetailLabel.stringValue = "Select one or more targets to start protected sessions."
+            protectionLabel.stringValue = protectionSummary()
             openButton.title = "Start Selected"
             openButton.isEnabled = false
             sendSelectedButton.isEnabled = false
@@ -565,6 +610,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationLabel.stringValue = "--:--"
             durationLabel.textColor = .secondaryLabelColor
             modeDetailLabel.stringValue = "Opening tmux sessions and attaching Terminal windows."
+            protectionLabel.stringValue = protectionSummary()
             openButton.title = "Starting..."
             openButton.isEnabled = false
             sendSelectedButton.isEnabled = false
@@ -581,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationLabel.stringValue = "Started about \(elapsed) ago"
             durationLabel.textColor = .labelColor
             modeDetailLabel.stringValue = "Selected sessions are running. Send clipboard text or stop them."
+            protectionLabel.stringValue = protectionSummary()
             openButton.title = "Started"
             openButton.isEnabled = false
             sendSelectedButton.isEnabled = true
@@ -597,6 +644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             durationLabel.stringValue = "Not running"
             durationLabel.textColor = .secondaryLabelColor
             modeDetailLabel.stringValue = "Start selected targets to enter the active status screen."
+            protectionLabel.stringValue = protectionSummary()
             openButton.title = "Start Selected"
             openButton.isEnabled = true
             sendSelectedButton.isEnabled = false
@@ -614,8 +662,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let elapsed = self.formatElapsed(from: activeSince)
             self.durationLabel.stringValue = "Started about \(elapsed) ago"
             self.summaryLabel.stringValue = "Active: selected sessions are running."
+            self.protectionLabel.stringValue = self.protectionSummary()
             self.scheduleActiveDurationRefresh()
         }
+    }
+
+    private func currentClipboardStats() -> InputStats? {
+        guard let value = NSPasteboard.general.string(forType: .string), !value.isEmpty else {
+            return nil
+        }
+        return InputStats(
+            characters: value.count,
+            bytes: value.data(using: .utf8)?.count ?? 0,
+            lines: value.components(separatedBy: .newlines).count
+        )
+    }
+
+    private func recordProtectedSend(_ stats: InputStats?) {
+        protectedSendCount += 1
+        guard let stats else { return }
+        protectedCharacterCount += stats.characters
+        protectedByteCount += stats.bytes
+        protectedLineCount += stats.lines
+    }
+
+    private func protectionSummary(includeBytes: Bool = false) -> String {
+        if protectedSendCount == 0 {
+            return "Protected: 0 sends"
+        }
+
+        let base = "Protected: \(protectedSendCount) send\(protectedSendCount == 1 ? "" : "s") · \(protectedCharacterCount) chars · \(protectedLineCount) line\(protectedLineCount == 1 ? "" : "s")"
+        if includeBytes {
+            return "\(base) · \(protectedByteCount) bytes"
+        }
+        return base
     }
 
     private func scheduleStatusPoll() {
@@ -685,7 +765,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         detailsContainer.isHidden = false
         detailsButton.title = "Hide Details"
         detailsHeightConstraint.constant = 130
-        window.setContentSize(NSSize(width: window.frame.width, height: 560))
+        window.setContentSize(NSSize(width: window.frame.width, height: 640))
     }
 
     private func returnFocusAfterSuccessfulAction() {

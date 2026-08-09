@@ -17,7 +17,7 @@ A macOS helper app for safer IME input in major AI CLI tools.
 Plain-language Korean description:
 
 ```text
-Claude Code, Codex, Gemini CLI 등 주요 AI CLI에서 한글/IME 입력이 누락되거나 중복되거나 한영 전환 중 꼬이는 문제를 줄여주는 macOS용 보조 앱입니다.
+Claude Code, Codex, Gemini CLI 같은 AI CLI에 한글/CJK 프롬프트를 한 글자씩 직접 치지 않고 더 안정적으로 넘기도록 도와주는 무료 macOS 보조 앱입니다.
 ```
 
 Important positioning:
@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.19/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.20/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -84,7 +84,7 @@ Use Claude Code, Codex, Gemini CLI, and Qwen Code with fewer missing characters,
 Korean version:
 
 ```text
-Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 줄여주는 macOS 보조 앱입니다.
+Claude Code, Codex, Gemini CLI에 한글 프롬프트를 더 안정적으로 넘기도록 도와주는 macOS 보조 앱입니다.
 ```
 
 ## Feature Bullets
@@ -95,6 +95,7 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 - Supports Claude Code, Codex, Gemini CLI, and Qwen Code by default
 - Sends already-committed IME text through bracketed paste
 - Helps avoid fragile character-by-character terminal input
+- Shows local Protected counters for safe sends, committed characters, lines, and bytes
 - Returns focus to Terminal after Send by default
 - Keeps interactive AI CLI sessions intact
 - No global keyboard interception by default
@@ -119,7 +120,19 @@ Mitigates known Korean/CJK/IME input glitches in interactive AI CLI tools by sen
 Korean:
 
 ```text
-한글/CJK/IME 조합이 확정된 문자열을 tmux bracketed paste로 전달해, 대화형 AI CLI의 불안정한 글자 단위 터미널 입력 경로를 우회합니다.
+한글/CJK/IME 조합이 끝난 글을 터미널에 한 글자씩 직접 치지 않고 tmux bracketed paste로 한 번에 넘겨, 대화형 AI CLI에서 깨지기 쉬운 입력 과정을 줄입니다.
+```
+
+Protected counter wording:
+
+```text
+Protected counters show how many successful sends, committed characters, lines, and bytes used the safe path in the current app run. They measure avoided direct terminal typing, not the exact number of typos that would have happened.
+```
+
+Korean:
+
+```text
+Protected 카운터는 이번 앱 실행 중 터미널에 직접 치지 않고 앱으로 넘긴 횟수, 문자 수, 줄 수, 바이트 수를 보여줍니다. 실제로 몇 개의 오타가 날 뻔했는지를 정확히 안다는 뜻은 아닙니다.
 ```
 
 ## What It Does Not Claim
@@ -129,6 +142,7 @@ Korean:
 - It does not fix terminal rendering bugs.
 - It does not fix every Claude/Codex/Gemini internal bug.
 - It does not correct typos already present in the copied text.
+- Protected counters do not prove exact avoided typo counts.
 - It is not a full terminal replacement yet.
 
 ## Current Build Reality

@@ -2,19 +2,18 @@
 
 한국어: 이 도구는 macOS의 전역 키보드 문제를 고치는 프로그램이 아닙니다.
 Codex, Claude Code, Gemini CLI 같은 대화형 AI CLI 앞에서 CJK 입력이 깨질 때,
-IME 조합이 확정된 문자열을 `tmux` bracketed paste로 전달하는 작은
-우회책입니다.
+IME 조합이 끝난 글을 터미널에 한 글자씩 치지 않고 `tmux` bracketed paste로
+한 번에 넘기는 작은 우회책입니다.
 
 English: This is not a global keyboard fixer. It is a tiny workaround for CJK
 input glitches in interactive AI CLIs. It sends already-committed IME text into
 an existing `tmux` session using bracketed paste, so the CLI receives a paste
 event instead of fragile character-by-character IME input.
 
-Important: this repository is the small fallback utility and early app shell,
-not the final product shape. The better long-term app is an IME-safe AI
-terminal/input layer where users type normally and the app handles the fragile
-input path automatically.
-See [`docs/focus-aware-input-design.md`](docs/focus-aware-input-design.md).
+Important: this repository is a free, open-source helper for starting AI CLI
+sessions, checking their status, and sending already-committed IME text through
+a safer path. It is intentionally not a full terminal replacement or a global
+keyboard fixer.
 
 ## Why
 
@@ -49,16 +48,22 @@ into a tmux session even when the app runs with GUI-style `/dev/null` stdin.
 The app does not use `CGEventTap`, `IOHIDManager`, Accessibility event
 monitoring, or global key interception.
 
+The app also tracks local "Protected" counters for the current app run: how many
+successful sends used the safe path, plus how many committed characters, lines,
+and bytes were delivered through that path. These counters are evidence of how
+much direct terminal typing was avoided; they are not a claim that the app can
+know the exact number of typos that would have happened.
+
 It does not fix hardware keyboard failures, Bluetooth dropouts, or terminal
 rendering bugs. If the original text in the input field or clipboard contains a
 typo, the helper sends that typo unchanged.
 
-## Download for macOS
+## Free Download for macOS
 
 Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.19/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.20/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
@@ -69,6 +74,10 @@ The app lets you choose the working folder for new AI CLI sessions. After Send,
 it returns focus to Terminal by default so it does not sit in front of your
 typing session. After Start, it keeps the Active screen visible so you can see
 which sessions are running.
+
+The macOS app uses native translucent glass-style panels for the status and
+target sections, keeping the interface small while making the Active/Ready state
+easy to scan.
 
 The release app is ad-hoc signed but not notarized. macOS may show a first-run
 security warning for downloads outside the App Store.
@@ -102,6 +111,7 @@ The wizard walks through:
 - choosing Claude Code, Codex, Gemini CLI, or Qwen Code
 - opening the selected CLI inside a named tmux session
 - pasting your copied prompt into that session
+- showing how much text was protected by the safe send path in this app run
 - returning focus to Terminal after Send
 
 If `tmux` is missing, the wizard shows an `Install tmux` button and installs it
@@ -177,7 +187,9 @@ echo "요약해줘" | ./ai-cli-paste claude --stdin --enter
 
 ## Raycast / Hammerspoon
 
-The useful product experience is a hotkey, not a big app.
+The useful product experience is a small helper app plus optional shortcuts, not
+a second place to type. Keep writing where you already work, then send the
+committed text into the active CLI session.
 
 Raycast script commands are in [`examples/`](examples/).
 
@@ -201,8 +213,8 @@ end)
 ```
 
 See also [`docs/why-cjk-ime-breaks.md`](docs/why-cjk-ime-breaks.md).
-See the long-term app direction in
-[`docs/focus-aware-input-design.md`](docs/focus-aware-input-design.md).
+For Mac App Store packaging notes, see
+[`docs/app-store-readiness.md`](docs/app-store-readiness.md).
 
 ## What This Helps
 
