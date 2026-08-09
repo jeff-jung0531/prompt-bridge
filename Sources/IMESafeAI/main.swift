@@ -64,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var detailsVisible = false
     private var activeSince: Date?
     private var activeRefreshScheduled = false
+    private var statusPollScheduled = false
+    private var startingTargetIDs: Set<String> = []
     private var eventMessages: [String] = []
     private var commandCache: [String: [String]?] = [:]
     private var sessionCreatedTimes: [String: Date] = [:]
@@ -126,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
         sendEnterCheckbox.state = .on
 
-        hideAfterActionCheckbox = NSButton(checkboxWithTitle: "Return focus after Start/Send", target: nil, action: nil)
+        hideAfterActionCheckbox = NSButton(checkboxWithTitle: "Return focus after Send", target: nil, action: nil)
         hideAfterActionCheckbox.state = UserDefaults.standard.object(forKey: hideAfterActionDefaultsKey) == nil
             ? .on
             : (UserDefaults.standard.bool(forKey: hideAfterActionDefaultsKey) ? .on : .off)
@@ -311,11 +313,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         var allSucceeded = true
         for target in targets {
+            startingTargetIDs.insert(target.id)
+        }
+        updateVisibleTargetState(activeSessions: tmuxSessions())
+        window.displayIfNeeded()
+
+        for target in targets {
             allSucceeded = openSession(target) && allSucceeded
+            startingTargetIDs.remove(target.id)
         }
         refreshStatus()
         if allSucceeded {
-            returnFocusAfterSuccessfulAction()
+            showWindow()
         } else {
             showWindow()
         }
@@ -379,6 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func refreshStatusAction() {
+        commandCache.removeAll()
         refreshStatus()
     }
 
@@ -516,7 +526,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let commandFound = detectCLI(target) != nil
             let active = activeSessions.contains(target.session)
             let suffix: String
-            if active {
+            if startingTargetIDs.contains(target.id) {
+                suffix = " (starting)"
+            } else if active {
                 suffix = " (active)"
             } else if commandFound {
                 suffix = " (not running)"
@@ -544,16 +556,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let allSelectedActive = selected.allSatisfy { activeSessions.contains($0.session) }
         let anySelectedActive = selected.contains { activeSessions.contains($0.session) }
-        if allSelectedActive {
+        let anySelectedStarting = selected.contains { startingTargetIDs.contains($0.id) }
+        if anySelectedStarting {
+            summaryLabel.stringValue = "Starting selected sessions..."
+            summaryLabel.textColor = .systemOrange
+            modeLabel.stringValue = "Starting"
+            modeLabel.textColor = .systemOrange
+            durationLabel.stringValue = "--:--"
+            durationLabel.textColor = .secondaryLabelColor
+            modeDetailLabel.stringValue = "Opening tmux sessions and attaching Terminal windows."
+            openButton.title = "Starting..."
+            openButton.isEnabled = false
+            sendSelectedButton.isEnabled = false
+            stopSelectedButton.isEnabled = anySelectedActive
+        } else if allSelectedActive {
             activeSince = selected
                 .compactMap { sessionCreatedTimes[$0.session] }
                 .min() ?? activeSince ?? Date()
             let elapsed = activeSince.map(formatElapsed) ?? "00:00"
-            summaryLabel.stringValue = "Active for \(elapsed): clipboard sends to selected sessions."
+            summaryLabel.stringValue = "Active: selected sessions are running."
             summaryLabel.textColor = .systemGreen
             modeLabel.stringValue = "Active"
             modeLabel.textColor = .systemGreen
-            durationLabel.stringValue = elapsed
+            durationLabel.stringValue = "Started about \(elapsed) ago"
             durationLabel.textColor = .labelColor
             modeDetailLabel.stringValue = "Selected sessions are running. Send clipboard text or stop them."
             openButton.title = "Started"
@@ -561,6 +586,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sendSelectedButton.isEnabled = true
             stopSelectedButton.isEnabled = true
             scheduleActiveDurationRefresh()
+            scheduleStatusPoll()
         } else {
             activeSince = nil
             let missingCount = selected.filter { !activeSessions.contains($0.session) }.count
@@ -581,26 +607,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleActiveDurationRefresh() {
         guard activeSince != nil, !activeRefreshScheduled else { return }
         activeRefreshScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
             guard let self else { return }
             self.activeRefreshScheduled = false
             guard let activeSince = self.activeSince else { return }
             let elapsed = self.formatElapsed(from: activeSince)
-            self.durationLabel.stringValue = elapsed
-            self.summaryLabel.stringValue = "Active for \(elapsed): clipboard sends to selected sessions."
+            self.durationLabel.stringValue = "Started about \(elapsed) ago"
+            self.summaryLabel.stringValue = "Active: selected sessions are running."
             self.scheduleActiveDurationRefresh()
+        }
+    }
+
+    private func scheduleStatusPoll() {
+        guard !statusPollScheduled else { return }
+        statusPollScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self else { return }
+            self.statusPollScheduled = false
+            let selected = self.selectedTargets
+            guard !selected.isEmpty else { return }
+            let sessions = self.tmuxSessions()
+            if selected.contains(where: { sessions.contains($0.session) }) {
+                self.refreshStatus()
+            } else if self.activeSince != nil {
+                self.refreshStatus()
+            }
         }
     }
 
     private func formatElapsed(from start: Date) -> String {
         let seconds = max(0, Int(Date().timeIntervalSince(start)))
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let secs = seconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        let minutes = max(1, Int(ceil(Double(seconds) / 60.0)))
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        if hours > 0 && remainingMinutes > 0 {
+            return "\(hours)h \(remainingMinutes)m"
         }
-        return String(format: "%02d:%02d", minutes, secs)
+        if hours > 0 {
+            return "\(hours)h"
+        }
+        return "\(minutes)m"
     }
 
     private func ensureTmux() -> Bool {

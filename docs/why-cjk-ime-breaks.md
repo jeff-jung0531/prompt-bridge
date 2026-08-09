@@ -39,10 +39,10 @@ apps. For this use case, adding another keyboard hook is the wrong kind of power
 
 ## Why Bracketed Paste
 
-Bracketed paste changes the contract. The CLI receives a completed text block as
-paste input, not a fragile stream of composing key events. That preserves the
-interactive AI CLI session while avoiding the most failure-prone part of the
-input path.
+Bracketed paste changes the contract. The CLI receives already-committed IME
+text as paste input, not a fragile stream of composing key events. That
+preserves the interactive AI CLI session while avoiding the most failure-prone
+part of the input path.
 
 This does not fix every problem. It cannot repair rendering bugs or shortcut
 bugs inside a CLI. It simply removes the CJK composition path from long prompt

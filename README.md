@@ -2,12 +2,13 @@
 
 한국어: 이 도구는 macOS의 전역 키보드 문제를 고치는 프로그램이 아닙니다.
 Codex, Claude Code, Gemini CLI 같은 대화형 AI CLI 앞에서 CJK 입력이 깨질 때,
-완성된 문장을 `tmux` bracketed paste로 주입하는 작은 우회책입니다.
+IME 조합이 확정된 문자열을 `tmux` bracketed paste로 전달하는 작은
+우회책입니다.
 
 English: This is not a global keyboard fixer. It is a tiny workaround for CJK
-input glitches in interactive AI CLIs. It sends completed text into an existing
-`tmux` session using bracketed paste, so the CLI receives a paste event instead
-of fragile character-by-character IME input.
+input glitches in interactive AI CLIs. It sends already-committed IME text into
+an existing `tmux` session using bracketed paste, so the CLI receives a paste
+event instead of fragile character-by-character IME input.
 
 Important: this repository is the small fallback utility and early app shell,
 not the final product shape. The better long-term app is an IME-safe AI
@@ -28,7 +29,7 @@ PTY handling, and the TUI framework can disagree. The symptoms are familiar:
 
 The safest practical workaround is:
 
-1. Write the prompt somewhere stable.
+1. Write the prompt somewhere stable, where IME composition commits correctly.
 2. Copy it.
 3. Paste it into the existing interactive CLI session as bracketed paste.
 4. Send Enter only when explicitly requested.
@@ -36,21 +37,38 @@ The safest practical workaround is:
 That keeps the important interactive loop intact: approvals, plan mode, slash
 commands, interrupts, tool permissions, and multi-turn context.
 
+## Evidence and Scope
+
+This helper can mitigate the class of bugs where Korean/CJK/IME text breaks
+while being typed directly into an interactive terminal UI. It does that by
+bypassing raw keystroke-by-keystroke input and sending text after IME composition
+has already been committed by macOS.
+
+Local validation for the macOS app verifies that clipboard text is delivered
+into a tmux session even when the app runs with GUI-style `/dev/null` stdin.
+The app does not use `CGEventTap`, `IOHIDManager`, Accessibility event
+monitoring, or global key interception.
+
+It does not fix hardware keyboard failures, Bluetooth dropouts, or terminal
+rendering bugs. If the original text in the input field or clipboard contains a
+typo, the helper sends that typo unchanged.
+
 ## Download for macOS
 
 Most users should start with the macOS app:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.18/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.19/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 Unzip it, open `IME Safe AI CLI Terminal.app`, choose the AI CLI tools you use,
 and follow the guided flow. The app can check whether `tmux` is available and
 offer an install path if it is missing.
 
-The app lets you choose the working folder for new AI CLI sessions. After a
-successful Start or Send, it returns focus to Terminal by default so it does not
-sit in front of your typing session.
+The app lets you choose the working folder for new AI CLI sessions. After Send,
+it returns focus to Terminal by default so it does not sit in front of your
+typing session. After Start, it keeps the Active screen visible so you can see
+which sessions are running.
 
 The release app is ad-hoc signed but not notarized. macOS may show a first-run
 security warning for downloads outside the App Store.
@@ -84,7 +102,7 @@ The wizard walks through:
 - choosing Claude Code, Codex, Gemini CLI, or Qwen Code
 - opening the selected CLI inside a named tmux session
 - pasting your copied prompt into that session
-- returning focus to Terminal after Start or Send
+- returning focus to Terminal after Send
 
 If `tmux` is missing, the wizard shows an `Install tmux` button and installs it
 with Homebrew. If `tmux` is already installed, it skips that step automatically.

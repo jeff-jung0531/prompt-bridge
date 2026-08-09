@@ -52,7 +52,7 @@ View on GitHub
 Download asset:
 
 ```text
-https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.18/ime-safe-ai-cli-terminal-macos.zip
+https://github.com/jeff-jung0531/ime-safe-ai-cli-terminal/releases/download/v0.1.19/ime-safe-ai-cli-terminal-macos.zip
 ```
 
 GitHub repo:
@@ -93,8 +93,9 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 - Checks and uses tmux automatically
 - Lets users choose the working folder for new CLI sessions
 - Supports Claude Code, Codex, Gemini CLI, and Qwen Code by default
-- Helps avoid fragile character-by-character IME input
-- Returns focus to Terminal after Start/Send by default
+- Sends already-committed IME text through bracketed paste
+- Helps avoid fragile character-by-character terminal input
+- Returns focus to Terminal after Send by default
 - Keeps interactive AI CLI sessions intact
 - No global keyboard interception by default
 - No Accessibility or Input Monitoring permission required for the current helper
@@ -107,12 +108,27 @@ Claude Code, Codex, Gemini CLI에서 한글 입력이 꼬이는 스트레스를 
 - Long prompt entry into AI CLI tools
 - Accidental early submission while text is still being composed
 
+## Evidence Language
+
+Recommended claim:
+
+```text
+Mitigates known Korean/CJK/IME input glitches in interactive AI CLI tools by sending already-committed IME text through tmux bracketed paste instead of fragile character-by-character terminal input.
+```
+
+Korean:
+
+```text
+한글/CJK/IME 조합이 확정된 문자열을 tmux bracketed paste로 전달해, 대화형 AI CLI의 불안정한 글자 단위 터미널 입력 경로를 우회합니다.
+```
+
 ## What It Does Not Claim
 
 - It does not fix all macOS keyboard problems.
 - It does not repair hardware keyboard issues.
 - It does not fix terminal rendering bugs.
 - It does not fix every Claude/Codex/Gemini internal bug.
+- It does not correct typos already present in the copied text.
 - It is not a full terminal replacement yet.
 
 ## Current Build Reality
@@ -122,7 +138,8 @@ Current v0.1 app shape:
 - A lightweight macOS `.app` wrapper around local helper scripts.
 - Users can select multiple installed AI CLI targets and start them together.
 - New sessions start in the chosen working folder, not Finder's `/` launch directory.
-- After successful Start or Send, the app hides by default so Terminal keeps focus.
+- After successful Start, the Active screen remains visible.
+- After successful Send, the app can hide so Terminal keeps focus.
 - Opens app-style macOS prompts for target selection and actions.
 - Keeps the main UI simple: target checkboxes, Start Selected, Send Clipboard,
   Details.
