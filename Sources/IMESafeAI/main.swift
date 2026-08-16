@@ -1,906 +1,766 @@
 import AppKit
 import Foundation
+import QuartzCore
 
-struct CommandCandidate {
-    let executable: String
-    let args: [String]
-}
+private let appName = "Prompt Bridge"
+private let bundleVersion = "0.2.0"
+private let fixedWindowContentSize = NSSize(width: 520, height: 214)
+private let buttonHeight: CGFloat = 30
+private let smallButtonHeight: CGFloat = 24
+private let promptMaxFileCount = 20
+private let promptMaxAge: TimeInterval = 7 * 24 * 60 * 60
+private let layoutInset: CGFloat = 16
+private let sectionToContentGap: CGFloat = 6
+private let contentBlockGap: CGFloat = 12
 
-struct Target {
-    let id: String
-    let label: String
-    let session: String
-    let candidates: [CommandCandidate]
-
-    static let all: [Target] = [
-        Target(id: "claude", label: "Claude Code", session: "claude", candidates: [
-            CommandCandidate(executable: "claude", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/claude", args: []),
-        ]),
-        Target(id: "codex", label: "Codex", session: "codex", candidates: [
-            CommandCandidate(executable: "codex", args: []),
-            CommandCandidate(executable: "/Applications/ChatGPT.app/Contents/Resources/codex", args: []),
-        ]),
-        Target(id: "gemini", label: "Gemini CLI", session: "gemini", candidates: [
-            CommandCandidate(executable: "gemini", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/gemini", args: []),
-        ]),
-        Target(id: "qwen", label: "Qwen Code", session: "qwen", candidates: [
-            CommandCandidate(executable: "qwen", args: []),
-            CommandCandidate(executable: "qwen-code", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/qwen", args: []),
-            CommandCandidate(executable: "\(NSHomeDirectory())/.local/bin/qwen-code", args: []),
-        ]),
-    ]
-}
-
-struct ShellResult {
-    let status: Int32
-    let output: String
-}
-
-struct InputStats {
+private struct InputStats {
     let characters: Int
     let bytes: Int
     let lines: Int
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let appName = "IME Safe AI CLI Terminal"
-    private let pathValue = "\(NSHomeDirectory())/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Applications/ChatGPT.app/Contents/Resources"
-    private let workingDirectoryDefaultsKey = "workingDirectory"
-    private let hideAfterActionDefaultsKey = "hideAfterSuccessfulAction"
+private enum AppLanguage {
+    case english
+    case korean
+    case japanese
+    case chinese
+}
 
-    private var window: NSWindow!
-    private var targetButtons: [String: NSButton] = [:]
-    private var statusView: NSTextView!
-    private var openButton: NSButton!
-    private var sendSelectedButton: NSButton!
-    private var stopSelectedButton: NSButton!
-    private var summaryLabel: NSTextField!
-    private var modeLabel: NSTextField!
-    private var durationLabel: NSTextField!
-    private var modeDetailLabel: NSTextField!
-    private var protectionLabel: NSTextField!
-    private var sendEnterCheckbox: NSButton!
-    private var hideAfterActionCheckbox: NSButton!
-    private var workingDirectoryLabel: NSTextField!
-    private var detailsContainer: NSScrollView!
-    private var detailsButton: NSButton!
-    private var detailsHeightConstraint: NSLayoutConstraint!
-    private var detailsVisible = false
-    private var activeSince: Date?
-    private var activeRefreshScheduled = false
-    private var statusPollScheduled = false
-    private var startingTargetIDs: Set<String> = []
-    private var eventMessages: [String] = []
-    private var commandCache: [String: [String]?] = [:]
-    private var sessionCreatedTimes: [String: Date] = [:]
-    private var protectedSendCount = 0
-    private var protectedCharacterCount = 0
-    private var protectedByteCount = 0
-    private var protectedLineCount = 0
+private enum L10n {
+    static let language: AppLanguage = {
+        let localeLanguage = Locale.current.language
+        let code = localeLanguage.languageCode?.identifier.lowercased() ?? "en"
+        if code == "ko" { return .korean }
+        if code == "ja" { return .japanese }
+        if code == "zh" { return .chinese }
+        return .english
+    }()
 
-    private var resourceURL: URL {
-        Bundle.main.resourceURL ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    static func text(_ en: String, _ ko: String, _ ja: String, _ zh: String) -> String {
+        switch language {
+        case .english: return en
+        case .korean: return ko
+        case .japanese: return ja
+        case .chinese: return zh
+        }
+    }
+}
+
+private enum GB {
+    private static func hex(_ value: UInt32, _ alpha: CGFloat = 1) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: alpha
+        )
     }
 
-    private var workingDirectory: String {
-        if let savedPath = UserDefaults.standard.string(forKey: workingDirectoryDefaultsKey),
-           isDirectory(savedPath) {
-            return savedPath
+    static let ink = hex(0xF7FAFF)
+    static let inkSoft = hex(0xE6EEF9)
+    static let muted = hex(0xB9C3D1)
+    static let faint = hex(0x7D8794)
+    static let inkDisabled = hex(0xF7FAFF, 0.40)
+    static let ice = hex(0xB9FFF2)
+    static let led = hex(0x8CF7E1)
+    static let ledTail = hex(0x3DC9B7)
+    static let panelReadable = hex(0x22272D, 0.76)
+    static let panelDark = hex(0x0D1218, 0.80)
+    static let controlBg = NSColor(white: 1, alpha: 0.075)
+    static let controlMuted = NSColor(white: 1, alpha: 0.045)
+    static let controlActive = hex(0xB9FFF2, 0.18)
+    static let controlDisabled = NSColor(white: 1, alpha: 0.04)
+    static let hairline = NSColor(white: 1, alpha: 0.08)
+    static let dotIdle = hex(0xF7FAFF, 0.28)
+    static let radius: CGFloat = 8
+    static let windowRadius: CGFloat = 12
+
+    static let lineLight: [NSColor] = [
+        NSColor(white: 1, alpha: 0.66),
+        hex(0xDCEAF4, 0.34),
+        NSColor(white: 1, alpha: 0.07),
+        hex(0x081826, 0.22)
+    ]
+    static let lineLightStops: [NSNumber] = [0, 0.34, 0.58, 1]
+    static let lineIce: [NSColor] = [
+        NSColor(white: 1, alpha: 0.6),
+        hex(0xB9FFF2, 0.76),
+        hex(0x8CF7E1, 0.24),
+        hex(0x3DC9B7, 0.28),
+        hex(0x081826, 0.2)
+    ]
+    static let lineIceStops: [NSNumber] = [0, 0.42, 0.64, 0.78, 1]
+
+    static func sans(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
+        let name: String
+        switch weight {
+        case .bold: name = "Pretendard-Bold"
+        case .semibold: name = "Pretendard-SemiBold"
+        case .medium: name = "Pretendard-Medium"
+        default: name = "Pretendard-Regular"
+        }
+        return NSFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: weight)
+    }
+
+    static func mono(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
+        NSFont(name: "JetBrainsMono-Regular", size: size)
+            ?? .monospacedSystemFont(ofSize: size, weight: weight)
+    }
+}
+
+private final class GlassRingLayer: CAGradientLayer {
+    private let ringMask = CAShapeLayer()
+    private var radiusValue: CGFloat = GB.radius
+
+    override init() {
+        super.init()
+        setup()
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        startPoint = CGPoint(x: 0, y: 1)
+        endPoint = CGPoint(x: 1, y: 0)
+        ringMask.fillColor = NSColor.clear.cgColor
+        ringMask.strokeColor = NSColor.white.cgColor
+        ringMask.lineWidth = 1
+        mask = ringMask
+        setActive(false)
+    }
+
+    func setActive(_ active: Bool) {
+        colors = (active ? GB.lineIce : GB.lineLight).map(\.cgColor)
+        locations = active ? GB.lineIceStops : GB.lineLightStops
+    }
+
+    func setCornerRadius(_ radius: CGFloat) {
+        radiusValue = radius
+        setNeedsLayout()
+    }
+
+    override func layoutSublayers() {
+        super.layoutSublayers()
+        ringMask.frame = bounds
+        ringMask.path = CGPath(
+            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+            cornerWidth: radiusValue,
+            cornerHeight: radiusValue,
+            transform: nil
+        )
+    }
+}
+
+private final class GlassPanelView: NSView {
+    private let fillLayer = CALayer()
+    private let ringLayer = GlassRingLayer()
+    private let cornerRadiusValue: CGFloat
+    private let cornerMask: CACornerMask
+
+    init(
+        dark: Bool = false,
+        cornerRadius: CGFloat = GB.radius,
+        maskedCorners: CACornerMask = [
+            .layerMinXMinYCorner,
+            .layerMaxXMinYCorner,
+            .layerMinXMaxYCorner,
+            .layerMaxXMaxYCorner
+        ]
+    ) {
+        cornerRadiusValue = cornerRadius
+        cornerMask = maskedCorners
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.maskedCorners = maskedCorners
+        layer?.masksToBounds = true
+        layer?.cornerCurve = .continuous
+        fillLayer.backgroundColor = (dark ? GB.panelDark : GB.panelReadable).cgColor
+        fillLayer.cornerRadius = cornerRadius
+        fillLayer.maskedCorners = maskedCorners
+        fillLayer.cornerCurve = .continuous
+        ringLayer.setCornerRadius(cornerRadius)
+        ringLayer.maskedCorners = maskedCorners
+        layer?.addSublayer(fillLayer)
+        layer?.addSublayer(ringLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        fillLayer.frame = bounds
+        ringLayer.frame = bounds
+        layer?.cornerRadius = cornerRadiusValue
+        layer?.maskedCorners = cornerMask
+    }
+}
+
+private final class GlassButtonCell: NSButtonCell {
+    var active = false
+    var compact = false
+
+    override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+
+        let bounds = frame.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: bounds, xRadius: GB.radius, yRadius: GB.radius)
+        let enabled = (controlView as? NSButton)?.isEnabled ?? true
+        (enabled ? (active ? GB.controlActive : GB.controlBg) : GB.controlDisabled).setFill()
+        path.fill()
+
+        let border = NSBezierPath(roundedRect: bounds, xRadius: GB.radius, yRadius: GB.radius)
+        (enabled ? (active ? GB.ice.withAlphaComponent(0.54) : NSColor.white.withAlphaComponent(0.28)) : NSColor.white.withAlphaComponent(0.15)).setStroke()
+        border.lineWidth = 1
+        border.stroke()
+
+        if enabled {
+            NSColor.white.withAlphaComponent(0.34).setStroke()
+            let top = NSBezierPath()
+            let topY = controlView.isFlipped ? bounds.minY + 1 : bounds.maxY - 1
+            top.move(to: NSPoint(x: bounds.minX + GB.radius, y: topY))
+            top.line(to: NSPoint(x: bounds.maxX - GB.radius, y: topY))
+            top.lineWidth = 1
+            top.stroke()
         }
 
-        let cwd = FileManager.default.currentDirectoryPath
-        if cwd != "/" {
-            return cwd
+        guard enabled && active else { return }
+        let ledHeight: CGFloat = compact ? 1.5 : 2
+        let ledY = controlView.isFlipped ? bounds.maxY - 2 - ledHeight : bounds.minY + 2
+        let ledRect = NSRect(
+            x: bounds.minX + 13,
+            y: ledY,
+            width: max(8, bounds.width - 26),
+            height: ledHeight
+        )
+        let ledPath = NSBezierPath(roundedRect: ledRect, xRadius: ledHeight, yRadius: ledHeight)
+        context.setShadow(offset: .zero, blur: compact ? 8 : 12, color: GB.led.withAlphaComponent(0.64).cgColor)
+        NSGradient(colors: [
+            GB.led.withAlphaComponent(0.00),
+            GB.led.withAlphaComponent(0.96),
+            GB.ice.withAlphaComponent(1.00),
+            GB.ledTail.withAlphaComponent(0.88),
+            GB.led.withAlphaComponent(0.00)
+        ])?.draw(in: ledPath, angle: 0)
+    }
+}
+
+private final class GlassButton: NSButton {
+    private let dotLayer = CALayer()
+    private var hasDot = false
+
+    init(title: String, active: Bool = false, compact: Bool = false) {
+        super.init(frame: .zero)
+        setButtonType(.momentaryPushIn)
+        isBordered = false
+        bezelStyle = .rounded
+        wantsLayer = true
+        font = GB.sans(12, .semibold)
+        contentTintColor = GB.inkSoft
+        cell = GlassButtonCell()
+        self.title = title
+        (cell as? GlassButtonCell)?.active = active
+        (cell as? GlassButtonCell)?.compact = compact
+        dotLayer.cornerRadius = compact ? 2 : 2.5
+        layer?.addSublayer(dotLayer)
+        setDot(false)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setActive(_ active: Bool) {
+        (cell as? GlassButtonCell)?.active = active
+        setDot(active)
+        needsDisplay = true
+    }
+
+    func setCompact(_ compact: Bool) {
+        font = GB.sans(compact ? 11 : 12, .semibold)
+        (cell as? GlassButtonCell)?.compact = compact
+        dotLayer.cornerRadius = compact ? 2 : 2.5
+    }
+
+    private func setDot(_ active: Bool) {
+        hasDot = true
+        dotLayer.backgroundColor = (active ? GB.led : GB.dotIdle).cgColor
+        dotLayer.shadowColor = active ? GB.led.cgColor : nil
+        dotLayer.shadowRadius = active ? 7 : 0
+        dotLayer.shadowOpacity = active ? 0.7 : 0
+        dotLayer.shadowOffset = .zero
+    }
+
+    override func layout() {
+        super.layout()
+        guard hasDot else { return }
+        let size: CGFloat = (cell as? GlassButtonCell)?.compact == true ? 4 : 5
+        dotLayer.frame = CGRect(x: 12, y: (bounds.height - size) / 2, width: size, height: size)
+    }
+
+    override var isEnabled: Bool {
+        didSet {
+            contentTintColor = isEnabled ? GB.inkSoft : GB.inkDisabled
+            alphaValue = isEnabled ? 1 : 0.74
         }
-        return NSHomeDirectory()
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var window: NSWindow!
+    private let promptStatusLabel = NSTextField(labelWithString: "")
+    private let promptHintLabel = NSTextField(labelWithString: "")
+    private let fileButton = GlassButton(title: "")
+    private let copyButton = GlassButton(title: "")
+    private let finderButton = GlassButton(title: "", compact: true)
+    private let footerLabel = NSTextField(labelWithString: "")
+    private let helpButton = NSButton(title: "i", target: nil, action: nil)
+    private var lastPromptFileURL: URL?
+    private var lastStats: InputStats?
+
+    private var promptDirectory: URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return base.appendingPathComponent("Prompt Bridge", isDirectory: true)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         buildWindow()
+        refreshState()
         showWindow()
-        refreshStatus()
-    }
-
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        showWindow()
-        refreshStatus()
-        return true
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
-    private func buildWindow() {
-        window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 580, height: 470),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = appName
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
-        window.backgroundColor = .clear
-        window.center()
-
-        let backdrop = NSVisualEffectView()
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.material = .underWindowBackground
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
-
-        let content = NSView()
-        content.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView = backdrop
-        backdrop.addSubview(content)
-
-        let title = NSTextField(labelWithString: appName)
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
-
-        let subtitle = NSTextField(labelWithString: "Start once, keep selected AI CLI sessions active, and stop them when finished.")
-        subtitle.textColor = .secondaryLabelColor
-        subtitle.font = .systemFont(ofSize: 13)
-
-        sendEnterCheckbox = NSButton(checkboxWithTitle: "Press Enter after sending", target: nil, action: nil)
-        sendEnterCheckbox.state = .on
-
-        hideAfterActionCheckbox = NSButton(checkboxWithTitle: "Return focus after Send", target: nil, action: nil)
-        hideAfterActionCheckbox.state = UserDefaults.standard.object(forKey: hideAfterActionDefaultsKey) == nil
-            ? .on
-            : (UserDefaults.standard.bool(forKey: hideAfterActionDefaultsKey) ? .on : .off)
-        hideAfterActionCheckbox.target = self
-        hideAfterActionCheckbox.action = #selector(toggleHideAfterAction)
-
-        openButton = NSButton(title: "Start Selected", target: self, action: #selector(openSelectedAction))
-        openButton.bezelStyle = .rounded
-        openButton.keyEquivalent = "\r"
-
-        sendSelectedButton = NSButton(title: "Send Clipboard", target: self, action: #selector(sendSelectedAction))
-        sendSelectedButton.bezelStyle = .rounded
-
-        stopSelectedButton = NSButton(title: "Stop Selected", target: self, action: #selector(stopSelectedAction))
-        stopSelectedButton.bezelStyle = .rounded
-
-        detailsButton = NSButton(title: "Details", target: self, action: #selector(toggleDetailsAction))
-        detailsButton.bezelStyle = .rounded
-
-        statusView = NSTextView()
-        statusView.isEditable = false
-        statusView.isSelectable = true
-        statusView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        statusView.textColor = .labelColor
-        statusView.backgroundColor = .textBackgroundColor
-
-        detailsContainer = NSScrollView()
-        detailsContainer.hasVerticalScroller = true
-        detailsContainer.borderType = .bezelBorder
-        detailsContainer.documentView = statusView
-        detailsContainer.isHidden = true
-
-        let headerStack = NSStackView(views: [title, subtitle])
-        headerStack.orientation = .vertical
-        headerStack.alignment = .leading
-        headerStack.spacing = 4
-
-        modeLabel = NSTextField(labelWithString: "Ready")
-        modeLabel.font = .systemFont(ofSize: 18, weight: .semibold)
-
-        durationLabel = NSTextField(labelWithString: "Not running")
-        durationLabel.font = .monospacedDigitSystemFont(ofSize: 28, weight: .semibold)
-
-        modeDetailLabel = NSTextField(labelWithString: "Select targets and start sessions.")
-        modeDetailLabel.textColor = .secondaryLabelColor
-        modeDetailLabel.font = .systemFont(ofSize: 12)
-
-        protectionLabel = NSTextField(labelWithString: "Protected: 0 sends")
-        protectionLabel.textColor = .secondaryLabelColor
-        protectionLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-
-        let modeStack = NSStackView(views: [modeLabel, durationLabel, modeDetailLabel, protectionLabel])
-        modeStack.orientation = .vertical
-        modeStack.alignment = .leading
-        modeStack.spacing = 4
-
-        let modeCard = makeGlassCard(containing: modeStack, margins: NSSize(width: 16, height: 14))
-
-        let targetLabel = NSTextField(labelWithString: "Targets")
-        targetLabel.font = .systemFont(ofSize: 13, weight: .medium)
-
-        let folderTitle = NSTextField(labelWithString: "Working Folder")
-        folderTitle.font = .systemFont(ofSize: 13, weight: .medium)
-
-        workingDirectoryLabel = NSTextField(labelWithString: "")
-        workingDirectoryLabel.lineBreakMode = .byTruncatingMiddle
-        workingDirectoryLabel.textColor = .secondaryLabelColor
-        workingDirectoryLabel.font = .systemFont(ofSize: 12)
-        updateWorkingDirectoryLabel()
-
-        let chooseFolderButton = NSButton(title: "Choose Folder...", target: self, action: #selector(chooseWorkingDirectoryAction))
-        chooseFolderButton.bezelStyle = .rounded
-
-        let folderRow = NSStackView(views: [workingDirectoryLabel, chooseFolderButton])
-        folderRow.orientation = .horizontal
-        folderRow.alignment = .centerY
-        folderRow.spacing = 8
-        folderRow.distribution = .fill
-        workingDirectoryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let folderStack = NSStackView(views: [folderTitle, folderRow])
-        folderStack.orientation = .vertical
-        folderStack.alignment = .leading
-        folderStack.spacing = 6
-
-        summaryLabel = NSTextField(labelWithString: "Checking sessions...")
-        summaryLabel.textColor = .secondaryLabelColor
-        summaryLabel.font = .systemFont(ofSize: 12, weight: .medium)
-
-        let targetGrid = NSGridView()
-        targetGrid.rowSpacing = 7
-        targetGrid.columnSpacing = 14
-        targetGrid.translatesAutoresizingMaskIntoConstraints = false
-
-        for rowIndex in 0..<2 {
-            var rowViews: [NSView] = []
-            for columnIndex in 0..<2 {
-                let index = rowIndex * 2 + columnIndex
-                if index < Target.all.count {
-                    let target = Target.all[index]
-                    let button = NSButton(checkboxWithTitle: target.label, target: self, action: #selector(refreshStatusAction))
-                    button.state = shouldSelectByDefault(target) ? .on : .off
-                    targetButtons[target.id] = button
-                    rowViews.append(button)
-                } else {
-                    rowViews.append(NSView())
-                }
-            }
-            targetGrid.addRow(with: rowViews)
-        }
-
-        let optionStack = NSStackView(views: [sendEnterCheckbox, hideAfterActionCheckbox])
-        optionStack.orientation = .vertical
-        optionStack.alignment = .leading
-        optionStack.spacing = 4
-
-        let targetStack = NSStackView(views: [folderStack, targetLabel, summaryLabel, targetGrid, optionStack])
-        targetStack.orientation = .vertical
-        targetStack.alignment = .leading
-        targetStack.spacing = 8
-        let targetCard = makeGlassCard(containing: targetStack, margins: NSSize(width: 16, height: 14))
-
-        let buttonStack = NSStackView(views: [openButton, sendSelectedButton, stopSelectedButton, detailsButton])
-        buttonStack.orientation = .horizontal
-        buttonStack.alignment = .centerY
-        buttonStack.spacing = 8
-
-        let hint = NSTextField(labelWithString: "Active sessions stay running in the background until stopped.")
-        hint.textColor = .secondaryLabelColor
-        hint.font = .systemFont(ofSize: 12)
-
-        let mainStack = NSStackView(views: [headerStack, modeCard, targetCard, buttonStack, hint, detailsContainer])
-        mainStack.translatesAutoresizingMaskIntoConstraints = false
-        mainStack.orientation = .vertical
-        mainStack.alignment = .leading
-        mainStack.spacing = 14
-        content.addSubview(mainStack)
-
-        NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 0),
-            content.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: 0),
-            content.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 0),
-            content.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor, constant: 0),
-            mainStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            mainStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
-            mainStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
-            mainStack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
-            modeCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-            targetCard.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-            folderRow.widthAnchor.constraint(equalTo: targetStack.widthAnchor),
-            detailsContainer.widthAnchor.constraint(equalTo: mainStack.widthAnchor),
-        ])
-        detailsHeightConstraint = detailsContainer.heightAnchor.constraint(equalToConstant: 0)
-        detailsHeightConstraint.isActive = true
-    }
-
-    private func makeGlassCard(containing view: NSView, margins: NSSize) -> NSVisualEffectView {
-        let card = NSVisualEffectView()
-        card.translatesAutoresizingMaskIntoConstraints = false
-        card.material = .popover
-        card.blendingMode = .withinWindow
-        card.state = .active
-        card.wantsLayer = true
-        card.layer?.cornerRadius = 14
-        card.layer?.cornerCurve = .continuous
-        card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-
-        view.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(view)
-        NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: margins.width),
-            view.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -margins.width),
-            view.topAnchor.constraint(equalTo: card.topAnchor, constant: margins.height),
-            view.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -margins.height),
-        ])
-        return card
-    }
-
-    private func shouldSelectByDefault(_ target: Target) -> Bool {
-        ["claude", "codex", "gemini"].contains(target.id) && detectCLI(target) != nil
-    }
-
-    private func showWindow() {
+    @objc private func showWindow() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private var selectedTargets: [Target] {
-        Target.all.filter { targetButtons[$0.id]?.state == .on }
+    private func buildWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: fixedWindowContentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = appName
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: fixedWindowContentSize)).size
+        window.maxSize = window.minSize
+        window.collectionBehavior = [.moveToActiveSpace]
+        self.window = window
+
+        let visual = NSVisualEffectView()
+        visual.material = .hudWindow
+        visual.blendingMode = .behindWindow
+        visual.state = .active
+        visual.translatesAutoresizingMaskIntoConstraints = false
+        visual.wantsLayer = true
+        visual.layer?.cornerRadius = GB.windowRadius
+        visual.layer?.masksToBounds = true
+        window.contentView = visual
+
+        let root = NSView()
+        root.translatesAutoresizingMaskIntoConstraints = false
+        visual.addSubview(root)
+        NSLayoutConstraint.activate([
+            root.leadingAnchor.constraint(equalTo: visual.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: visual.trailingAnchor),
+            root.topAnchor.constraint(equalTo: visual.topAnchor),
+            root.bottomAnchor.constraint(equalTo: visual.bottomAnchor)
+        ])
+
+        let titlebar = makeTitlebar()
+        let mainPanel = makeMainPanel()
+        let footer = makeFooter()
+        root.addSubview(titlebar)
+        root.addSubview(mainPanel)
+        root.addSubview(footer)
+        NSLayoutConstraint.activate([
+            titlebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            titlebar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            titlebar.topAnchor.constraint(equalTo: root.topAnchor),
+            titlebar.heightAnchor.constraint(equalToConstant: 38),
+            mainPanel.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            mainPanel.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            mainPanel.topAnchor.constraint(equalTo: titlebar.bottomAnchor),
+            mainPanel.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            footer.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: 31)
+        ])
+
+        window.center()
     }
 
-    @objc private func openSelectedAction() {
-        let targets = selectedTargets
-        guard !targets.isEmpty else {
-            appendStatus("Select at least one target.")
-            showDetails()
-            return
-        }
-        var allSucceeded = true
-        for target in targets {
-            startingTargetIDs.insert(target.id)
-        }
-        updateVisibleTargetState(activeSessions: tmuxSessions())
-        window.displayIfNeeded()
+    private func makeTitlebar() -> NSView {
+        let view = GlassPanelView(
+            dark: true,
+            cornerRadius: 0
+        )
+        view.translatesAutoresizingMaskIntoConstraints = false
 
-        for target in targets {
-            allSucceeded = openSession(target) && allSucceeded
-            startingTargetIDs.remove(target.id)
-        }
-        refreshStatus()
-        if allSucceeded {
-            showWindow()
-        } else {
-            showWindow()
-        }
+        let title = NSTextField(labelWithString: appName)
+        title.font = GB.sans(12, .bold)
+        title.textColor = GB.ink
+        title.alignment = .center
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        helpButton.title = "i"
+        helpButton.font = GB.sans(11, .medium)
+        helpButton.contentTintColor = GB.faint
+        helpButton.isBordered = false
+        helpButton.target = self
+        helpButton.action = #selector(showHelpAction)
+        helpButton.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(title)
+        view.addSubview(helpButton)
+        NSLayoutConstraint.activate([
+            title.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 80),
+            title.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -1),
+            helpButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -layoutInset),
+            helpButton.centerYAnchor.constraint(equalTo: title.centerYAnchor),
+            helpButton.widthAnchor.constraint(equalToConstant: 20),
+            helpButton.heightAnchor.constraint(equalToConstant: 20)
+        ])
+        return view
     }
 
-    @objc private func sendSelectedAction() {
-        let targets = selectedTargets
-        guard !targets.isEmpty else {
-            appendStatus("Select at least one target.")
-            showDetails()
-            return
+    private func makeMainPanel() -> NSView {
+        let panel = GlassPanelView(cornerRadius: 0)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+
+        let copiedHeader = makeSectionHeader(
+            L10n.text("COPIED TEXT", "복사된 텍스트", "コピーしたテキスト", "已复制文本")
+        )
+
+        let statusColumn = NSStackView()
+        statusColumn.orientation = .vertical
+        statusColumn.alignment = .leading
+        statusColumn.spacing = 3
+        statusColumn.translatesAutoresizingMaskIntoConstraints = false
+
+        promptStatusLabel.font = GB.sans(12, .semibold)
+        promptStatusLabel.textColor = GB.ink
+        promptStatusLabel.alignment = .left
+        promptStatusLabel.lineBreakMode = .byTruncatingTail
+        promptHintLabel.font = GB.sans(12)
+        promptHintLabel.textColor = GB.muted
+        promptHintLabel.alignment = .left
+        promptHintLabel.lineBreakMode = .byTruncatingTail
+        statusColumn.addArrangedSubview(promptStatusLabel)
+        statusColumn.addArrangedSubview(promptHintLabel)
+        statusColumn.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        style(fileButton, title: L10n.text("Make File", "파일 만들기", "ファイル作成", "制作文件"), width: 112, height: buttonHeight)
+        fileButton.target = self
+        fileButton.action = #selector(makeFileAction)
+
+        style(copyButton, title: L10n.text("Copy File", "파일 복사", "ファイルをコピー", "复制文件"), width: 112, height: buttonHeight)
+        copyButton.target = self
+        copyButton.action = #selector(copyFileAction)
+
+        style(finderButton, title: L10n.text("Open Finder", "Finder 열기", "Finderで表示", "在Finder中显示"), width: 76, height: smallButtonHeight)
+        finderButton.target = self
+        finderButton.action = #selector(openFinderAction)
+
+        statusColumn.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
+
+        let buttonRow = NSStackView(views: [fileButton, copyButton, NSView()])
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.distribution = .fill
+        buttonRow.spacing = 8
+        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let separator = makeSeparator()
+        let browserHeader = makeSectionHeader(
+            L10n.text("BROWSER ATTACHMENT", "브라우저 첨부", "ブラウザ添付", "浏览器附件")
+        )
+
+        [copiedHeader, statusColumn, finderButton, separator, browserHeader, buttonRow].forEach {
+            panel.addSubview($0)
         }
-        var allSucceeded = true
-        let inputStats = currentClipboardStats()
-        for target in targets {
-            let succeeded = sendClipboard(to: target)
-            if succeeded {
-                recordProtectedSend(inputStats)
-            }
-            allSucceeded = succeeded && allSucceeded
-        }
-        refreshStatus()
-        if allSucceeded {
-            returnFocusAfterSuccessfulAction()
-        } else {
-            showWindow()
-        }
+
+        NSLayoutConstraint.activate([
+            copiedHeader.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: layoutInset),
+            copiedHeader.trailingAnchor.constraint(lessThanOrEqualTo: panel.trailingAnchor, constant: -layoutInset),
+            copiedHeader.topAnchor.constraint(equalTo: panel.topAnchor, constant: 14),
+
+            statusColumn.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: layoutInset),
+            statusColumn.topAnchor.constraint(equalTo: copiedHeader.bottomAnchor, constant: sectionToContentGap),
+            statusColumn.trailingAnchor.constraint(lessThanOrEqualTo: finderButton.leadingAnchor, constant: -12),
+
+            finderButton.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -(layoutInset + 8)),
+            finderButton.centerYAnchor.constraint(equalTo: statusColumn.centerYAnchor),
+
+            separator.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: layoutInset),
+            separator.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -layoutInset),
+            separator.topAnchor.constraint(equalTo: statusColumn.bottomAnchor, constant: contentBlockGap),
+
+            browserHeader.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: layoutInset),
+            browserHeader.trailingAnchor.constraint(lessThanOrEqualTo: panel.trailingAnchor, constant: -layoutInset),
+            browserHeader.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: contentBlockGap),
+
+            buttonRow.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: layoutInset),
+            buttonRow.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -layoutInset),
+            buttonRow.topAnchor.constraint(equalTo: browserHeader.bottomAnchor, constant: sectionToContentGap)
+        ])
+        return panel
     }
 
-    @objc private func stopSelectedAction() {
-        let targets = selectedTargets
-        guard !targets.isEmpty else {
-            appendStatus("Select at least one target.")
-            showDetails()
-            return
-        }
+    private func makeFooter() -> NSView {
+        let footer = GlassPanelView(
+            dark: true,
+            cornerRadius: 0
+        )
+        footer.translatesAutoresizingMaskIntoConstraints = false
 
-        let activeTargets = targets.filter { hasSession($0.session) }
-        guard !activeTargets.isEmpty else {
-            appendStatus("No selected active sessions to stop.")
-            refreshStatus()
-            return
-        }
+        footerLabel.font = GB.sans(11, .semibold)
+        footerLabel.textColor = GB.inkSoft
+        footerLabel.lineBreakMode = .byTruncatingTail
+        footerLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let alert = NSAlert()
-        alert.messageText = "Stop selected sessions?"
-        alert.informativeText = "This will terminate \(activeTargets.map(\.label).joined(separator: ", "))."
-        alert.addButton(withTitle: "Stop")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        footer.addSubview(footerLabel)
+        NSLayoutConstraint.activate([
+            footerLabel.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: layoutInset),
+            footerLabel.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -layoutInset),
+            footerLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor)
+        ])
+        return footer
+    }
 
-        for target in targets {
-            guard hasSession(target.session) else { continue }
-            let result = runShell("tmux kill-session -t \(shellQuote(target.session))")
-            if result.status == 0 {
-                sessionCreatedTimes.removeValue(forKey: target.session)
-                activeSince = nil
-                appendStatus("Stopped \(target.label) session '\(target.session)'.")
+    private func makeSectionHeader(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title.uppercased())
+        label.font = GB.sans(11, .semibold)
+        label.textColor = GB.faint
+        label.alignment = .left
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }
+
+    private func makeSeparator() -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = GB.hairline.cgColor
+        view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            view.heightAnchor.constraint(equalToConstant: 1)
+        ])
+        return view
+    }
+
+    private func style(_ button: GlassButton, title: String, width: CGFloat, height: CGFloat) {
+        button.title = title
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setCompact(height < buttonHeight)
+        button.setActive(height >= buttonHeight)
+        button.font = GB.sans(height < buttonHeight ? 11 : 12, .semibold)
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: width),
+            button.heightAnchor.constraint(equalToConstant: height)
+        ])
+    }
+
+    private func refreshState() {
+        if let fileURL = lastPromptFileURL {
+            let statsText: String
+            if let stats = lastStats {
+                statsText = L10n.text(
+                    "\(stats.characters) chars · \(stats.lines) lines",
+                    "\(stats.characters)자 · \(stats.lines)줄",
+                    "\(stats.characters)文字 · \(stats.lines)行",
+                    "\(stats.characters)字 · \(stats.lines)行"
+                )
             } else {
-                appendStatus("\(target.label): stop failed\n\(result.output.trimmingCharacters(in: .whitespacesAndNewlines))")
-                showDetails()
+                statsText = fileURL.lastPathComponent
             }
-        }
-        refreshStatus()
-        showWindow()
-    }
-
-    @objc private func refreshStatusAction() {
-        commandCache.removeAll()
-        refreshStatus()
-    }
-
-    @objc private func toggleDetailsAction() {
-        detailsVisible.toggle()
-        detailsContainer.isHidden = !detailsVisible
-        detailsButton.title = detailsVisible ? "Hide Details" : "Details"
-        detailsHeightConstraint.constant = detailsVisible ? 130 : 0
-        window.setContentSize(NSSize(width: window.frame.width, height: detailsVisible ? 640 : 470))
-        refreshStatus()
-    }
-
-    @objc private func chooseWorkingDirectoryAction() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: workingDirectory)
-        panel.prompt = "Use Folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        UserDefaults.standard.set(url.path, forKey: workingDirectoryDefaultsKey)
-        updateWorkingDirectoryLabel()
-        appendStatus("Working folder set to \(url.path). New sessions will start there.")
-    }
-
-    @objc private func toggleHideAfterAction() {
-        UserDefaults.standard.set(hideAfterActionCheckbox.state == .on, forKey: hideAfterActionDefaultsKey)
-    }
-
-    private func openSession(_ target: Target) -> Bool {
-        guard ensureTmux() else { return false }
-        if hasSession(target.session) {
-            appendStatus("\(target.label): already active. You can keep using Send Clipboard.")
-            return true
-        }
-
-        guard let commandParts = detectCLI(target) else {
-            appendStatus("\(target.label): command not found. Install or log in first.")
-            showDetails()
-            return false
-        }
-
-        let launchCommand = commandParts.map(shellQuote).joined(separator: " ")
-        let createResult = runShell("tmux new-session -d -c \(shellQuote(workingDirectory)) -s \(shellQuote(target.session)) \(launchCommand)")
-        if createResult.status != 0 {
-            let output = createResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            appendStatus("\(target.label): could not start tmux session '\(target.session)'.\n\(output)")
-            showDetails()
-            return false
-        }
-
-        guard hasSession(target.session) else {
-            appendStatus("\(target.label): start command finished, but no active tmux session was created.")
-            showDetails()
-            return false
-        }
-
-        let command = "tmux attach-session -t \(shellQuote(target.session))"
-        let script = """
-        tell application "Terminal"
-          activate
-          do script "\(escapeAppleScript(command))"
-        end tell
-        """
-        if !runAppleScript(script) {
-            appendStatus("\(target.label): session is active, but the Terminal attach window could not be opened.")
-            showDetails()
-        }
-        appendStatus("Started \(target.label). Session '\(target.session)' is active.")
-        return true
-    }
-
-    private func sendClipboard(to target: Target) -> Bool {
-        guard ensureTmux() else { return false }
-        guard hasSession(target.session) else {
-            appendStatus("\(target.label): no tmux session named '\(target.session)'. Open it first.")
-            showDetails()
-            return false
-        }
-
-        let pasteScript = resourceURL.appendingPathComponent("ai-cli-paste").path
-        var args = [target.session]
-        if sendEnterCheckbox.state == .on {
-            args.append("--enter")
-        }
-
-        let result = runExecutable(pasteScript, args: args)
-        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        if result.status == 0 {
-            appendStatus("\(target.label): \(output.isEmpty ? "sent clipboard" : output)")
-            return true
+            promptStatusLabel.stringValue = statsText
+            promptHintLabel.stringValue = L10n.text(
+                "Use Cmd+V in Claude. Copy File copies it again.",
+                "Claude 입력창에서 Cmd+V를 누르세요. 파일 복사는 같은 파일을 다시 복사합니다.",
+                "ClaudeでCmd+V。ファイルコピーで再コピーできます。",
+                "在 Claude 中按 Cmd+V。复制文件可再次复制。"
+            )
+            footerLabel.stringValue = L10n.text(
+                "File copied. Paste it into Claude.",
+                "파일이 복사됐습니다. Claude에 붙여넣으세요.",
+                "ファイルをコピーしました。Claudeに貼り付けてください。",
+                "文件已复制。粘贴到 Claude。"
+            )
+            copyButton.isEnabled = true
+            finderButton.isEnabled = true
         } else {
-            appendStatus("\(target.label): send failed\n\(output)")
-            showDetails()
-            return false
+            promptStatusLabel.stringValue = L10n.text(
+                "Copy long text",
+                "긴 텍스트를 복사하세요",
+                "長いテキストをコピー",
+                "复制长文本"
+            )
+            promptHintLabel.stringValue = L10n.text(
+                "Make File creates and copies an md file.",
+                "파일 만들기는 md 파일을 만들고 바로 복사합니다.",
+                "ファイル作成でmdファイルを作ってコピーします。",
+                "制作文件会生成并复制 md 文件。"
+            )
+            footerLabel.stringValue = L10n.text(
+                "Copy long text, then make a file.",
+                "긴 텍스트를 복사한 뒤 파일을 만드세요.",
+                "長いテキストをコピーしてからファイルを作成。",
+                "复制长文本，然后制作文件。"
+            )
+            copyButton.isEnabled = false
+            finderButton.isEnabled = false
         }
     }
 
-    private func refreshStatus() {
-        var lines: [String] = []
-        lines.append("Status updated: \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium))")
-        lines.append("")
-        lines.append("tmux: \(runShell("command -v tmux").status == 0 ? "OK" : "missing")")
-        lines.append("")
-
-        let sessions = tmuxSessions()
-        sessionCreatedTimes = tmuxSessionCreatedTimes()
-        updateVisibleTargetState(activeSessions: sessions)
-        for target in Target.all {
-            let cli = detectCLI(target) == nil ? "missing" : "OK"
-            let session = sessions.contains(target.session) ? "active" : "not running"
-            lines.append("\(target.label): command \(cli), session '\(target.session)' \(session)")
-        }
-
-        if !sessions.isEmpty {
-            lines.append("")
-            lines.append("All tmux sessions: \(sessions.joined(separator: ", "))")
-        }
-
-        lines.append("")
-        lines.append("Working folder: \(workingDirectory)")
-        lines.append(protectionSummary(includeBytes: true))
-
-        if !eventMessages.isEmpty {
-            lines.append("")
-            lines.append("Events:")
-            lines.append(contentsOf: eventMessages.suffix(12))
-        }
-
-        setStatus(lines.joined(separator: "\n"))
-    }
-
-    private func updateVisibleTargetState(activeSessions: [String]) {
-        for target in Target.all {
-            let commandFound = detectCLI(target) != nil
-            let active = activeSessions.contains(target.session)
-            let suffix: String
-            if startingTargetIDs.contains(target.id) {
-                suffix = " (starting)"
-            } else if active {
-                suffix = " (active)"
-            } else if commandFound {
-                suffix = " (not running)"
-            } else {
-                suffix = " (missing)"
-            }
-            targetButtons[target.id]?.title = target.label + suffix
-        }
-
-        let selected = selectedTargets
-        if selected.isEmpty {
-            summaryLabel.stringValue = "Select one or more targets."
-            summaryLabel.textColor = .secondaryLabelColor
-            modeLabel.stringValue = "Ready"
-            modeLabel.textColor = .labelColor
-            durationLabel.stringValue = "Not running"
-            durationLabel.textColor = .secondaryLabelColor
-            modeDetailLabel.stringValue = "Select one or more targets to start protected sessions."
-            protectionLabel.stringValue = protectionSummary()
-            openButton.title = "Start Selected"
-            openButton.isEnabled = false
-            sendSelectedButton.isEnabled = false
-            stopSelectedButton.isEnabled = false
+    @objc private func makeFileAction() {
+        guard let prompt = copiedPrompt() else {
+            showAlert(
+                title: L10n.text("No copied text", "복사된 텍스트 없음", "コピーしたテキストがありません", "没有复制的文本"),
+                message: L10n.text(
+                    "Copy long text first, then click Make File.",
+                    "긴 텍스트를 먼저 복사한 뒤 파일 만들기를 누르세요.",
+                    "先に長いテキストをコピーしてからファイル作成を押してください。",
+                    "请先复制长文本，然后点击制作文件。"
+                )
+            )
             return
         }
 
-        let allSelectedActive = selected.allSatisfy { activeSessions.contains($0.session) }
-        let anySelectedActive = selected.contains { activeSessions.contains($0.session) }
-        let anySelectedStarting = selected.contains { startingTargetIDs.contains($0.id) }
-        if anySelectedStarting {
-            summaryLabel.stringValue = "Starting selected sessions..."
-            summaryLabel.textColor = .systemOrange
-            modeLabel.stringValue = "Starting"
-            modeLabel.textColor = .systemOrange
-            durationLabel.stringValue = "--:--"
-            durationLabel.textColor = .secondaryLabelColor
-            modeDetailLabel.stringValue = "Opening tmux sessions and attaching Terminal windows."
-            protectionLabel.stringValue = protectionSummary()
-            openButton.title = "Starting..."
-            openButton.isEnabled = false
-            sendSelectedButton.isEnabled = false
-            stopSelectedButton.isEnabled = anySelectedActive
-        } else if allSelectedActive {
-            activeSince = selected
-                .compactMap { sessionCreatedTimes[$0.session] }
-                .min() ?? activeSince ?? Date()
-            let elapsed = activeSince.map(formatElapsed) ?? "00:00"
-            summaryLabel.stringValue = "Active: selected sessions are running."
-            summaryLabel.textColor = .systemGreen
-            modeLabel.stringValue = "Active"
-            modeLabel.textColor = .systemGreen
-            durationLabel.stringValue = "Started about \(elapsed) ago"
-            durationLabel.textColor = .labelColor
-            modeDetailLabel.stringValue = "Selected sessions are running. Send clipboard text or stop them."
-            protectionLabel.stringValue = protectionSummary()
-            openButton.title = "Started"
-            openButton.isEnabled = false
-            sendSelectedButton.isEnabled = true
-            stopSelectedButton.isEnabled = true
-            scheduleActiveDurationRefresh()
-            scheduleStatusPoll()
-        } else {
-            activeSince = nil
-            let missingCount = selected.filter { !activeSessions.contains($0.session) }.count
-            summaryLabel.stringValue = "Needs start: \(missingCount) selected session\(missingCount == 1 ? "" : "s") not running."
-            summaryLabel.textColor = .systemOrange
-            modeLabel.stringValue = "Ready"
-            modeLabel.textColor = .labelColor
-            durationLabel.stringValue = "Not running"
-            durationLabel.textColor = .secondaryLabelColor
-            modeDetailLabel.stringValue = "Start selected targets to enter the active status screen."
-            protectionLabel.stringValue = protectionSummary()
-            openButton.title = "Start Selected"
-            openButton.isEnabled = true
-            sendSelectedButton.isEnabled = false
-            stopSelectedButton.isEnabled = anySelectedActive
+        do {
+            try FileManager.default.createDirectory(at: promptDirectory, withIntermediateDirectories: true)
+            let fileURL = try writePromptFile(prompt)
+            copyFileToPasteboard(fileURL)
+            lastPromptFileURL = fileURL
+            lastStats = stats(for: prompt)
+            cleanupOldPromptFiles()
+            refreshState()
+        } catch {
+            showAlert(
+                title: L10n.text("Could not make file", "파일을 만들 수 없음", "ファイルを作成できません", "无法制作文件"),
+                message: error.localizedDescription
+            )
         }
     }
 
-    private func scheduleActiveDurationRefresh() {
-        guard activeSince != nil, !activeRefreshScheduled else { return }
-        activeRefreshScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
-            guard let self else { return }
-            self.activeRefreshScheduled = false
-            guard let activeSince = self.activeSince else { return }
-            let elapsed = self.formatElapsed(from: activeSince)
-            self.durationLabel.stringValue = "Started about \(elapsed) ago"
-            self.summaryLabel.stringValue = "Active: selected sessions are running."
-            self.protectionLabel.stringValue = self.protectionSummary()
-            self.scheduleActiveDurationRefresh()
-        }
+    @objc private func copyFileAction() {
+        guard let fileURL = lastPromptFileURL else { return }
+        copyFileToPasteboard(fileURL)
+        refreshState()
     }
 
-    private func currentClipboardStats() -> InputStats? {
-        guard let value = NSPasteboard.general.string(forType: .string), !value.isEmpty else {
-            return nil
-        }
-        return InputStats(
-            characters: value.count,
-            bytes: value.data(using: .utf8)?.count ?? 0,
-            lines: value.components(separatedBy: .newlines).count
+    @objc private func openFinderAction() {
+        guard let fileURL = lastPromptFileURL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
+    @objc private func showHelpAction() {
+        showAlert(
+            title: appName,
+            message: L10n.text(
+                "Turns copied long text into a real md file and copies that file. Use it when Claude turns a long paste into an attachment that arrives empty.\n\nFiles are kept in the app cache and can be opened from Finder.",
+                "복사한 긴 텍스트를 실제 md 파일로 만들고 그 파일을 복사합니다. Claude에서 긴 붙여넣기가 빈 첨부로 들어갈 때 사용하세요.\n\n파일은 앱 캐시에 임시 저장되며 Finder에서 열 수 있습니다.",
+                "コピーした長いテキストを実際のmdファイルにして、そのファイルをコピーします。Claudeで長い貼り付けが空の添付になる時に使います。\n\nファイルはアプリのキャッシュに保存され、Finderで開けます。",
+                "把复制的长文本制作成真实 md 文件并复制该文件。Claude 将长粘贴变成空附件时使用。\n\n文件保存在应用缓存中，可在 Finder 中打开。"
+            )
         )
     }
 
-    private func recordProtectedSend(_ stats: InputStats?) {
-        protectedSendCount += 1
-        guard let stats else { return }
-        protectedCharacterCount += stats.characters
-        protectedByteCount += stats.bytes
-        protectedLineCount += stats.lines
+    private func copiedPrompt() -> String? {
+        let text = NSPasteboard.general.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let text, !text.isEmpty else { return nil }
+        return text
     }
 
-    private func protectionSummary(includeBytes: Bool = false) -> String {
-        if protectedSendCount == 0 {
-            return "Protected: 0 sends"
+    private func writePromptFile(_ prompt: String) throws -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMdd-HHmm"
+        let prefix = safeFilenamePrefix(prompt)
+        var fileURL = promptDirectory.appendingPathComponent("\(prefix)-\(formatter.string(from: Date())).md")
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: fileURL.path) {
+            fileURL = promptDirectory.appendingPathComponent("\(prefix)-\(formatter.string(from: Date()))-\(suffix).md")
+            suffix += 1
         }
-
-        let base = "Protected: \(protectedSendCount) send\(protectedSendCount == 1 ? "" : "s") · \(protectedCharacterCount) chars · \(protectedLineCount) line\(protectedLineCount == 1 ? "" : "s")"
-        if includeBytes {
-            return "\(base) · \(protectedByteCount) bytes"
-        }
-        return base
+        try prompt.write(to: fileURL, atomically: true, encoding: .utf8)
+        return fileURL
     }
 
-    private func scheduleStatusPoll() {
-        guard !statusPollScheduled else { return }
-        statusPollScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            guard let self else { return }
-            self.statusPollScheduled = false
-            let selected = self.selectedTargets
-            guard !selected.isEmpty else { return }
-            let sessions = self.tmuxSessions()
-            if selected.contains(where: { sessions.contains($0.session) }) {
-                self.refreshStatus()
-            } else if self.activeSince != nil {
-                self.refreshStatus()
+    private func copyFileToPasteboard(_ fileURL: URL) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([fileURL as NSURL])
+    }
+
+    private func stats(for text: String) -> InputStats {
+        InputStats(
+            characters: text.count,
+            bytes: text.data(using: .utf8)?.count ?? 0,
+            lines: max(1, text.components(separatedBy: .newlines).count)
+        )
+    }
+
+    private func safeFilenamePrefix(_ text: String) -> String {
+        let fallback = L10n.text("prompt", "프롬프트", "prompt", "prompt")
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? fallback
+        let cleaned = firstLine
+            .precomposedStringWithCanonicalMapping
+            .replacingOccurrences(of: #"[/:\\?%*|"<>]"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = cleaned.isEmpty ? fallback : cleaned
+        return String(prefix.prefix(36))
+    }
+
+    private func cleanupOldPromptFiles() {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: promptDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let now = Date()
+        let dated = files.compactMap { url -> (URL, Date)? in
+            guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]) else { return nil }
+            return (url, values.contentModificationDate ?? .distantPast)
+        }.sorted { $0.1 > $1.1 }
+
+        for (index, item) in dated.enumerated() {
+            if index >= promptMaxFileCount || now.timeIntervalSince(item.1) > promptMaxAge {
+                try? FileManager.default.removeItem(at: item.0)
             }
         }
     }
 
-    private func formatElapsed(from start: Date) -> String {
-        let seconds = max(0, Int(Date().timeIntervalSince(start)))
-        let minutes = max(1, Int(ceil(Double(seconds) / 60.0)))
-        let hours = minutes / 60
-        let remainingMinutes = minutes % 60
-        if hours > 0 && remainingMinutes > 0 {
-            return "\(hours)h \(remainingMinutes)m"
-        }
-        if hours > 0 {
-            return "\(hours)h"
-        }
-        return "\(minutes)m"
-    }
-
-    private func ensureTmux() -> Bool {
-        if runShell("command -v tmux").status == 0 {
-            return true
-        }
-
-        if runShell("command -v brew").status != 0 {
-            appendStatus("tmux is required, but Homebrew was not found. Install Homebrew first, then run: brew install tmux")
-            showDetails()
-            return false
-        }
-
+    private func showAlert(title: String, message: String) {
         let alert = NSAlert()
-        alert.messageText = "Install tmux?"
-        alert.informativeText = "tmux is required to keep AI CLI sessions open safely."
-        alert.addButton(withTitle: "Install tmux")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
-
-        let script = """
-        tell application "Terminal"
-          activate
-          do script "brew install tmux"
-        end tell
-        """
-        _ = runAppleScript(script)
-        appendStatus("A Terminal window is installing tmux. Try again after installation finishes.")
-        showDetails()
-        return false
-    }
-
-    private func showDetails() {
-        guard !detailsVisible else { return }
-        detailsVisible = true
-        detailsContainer.isHidden = false
-        detailsButton.title = "Hide Details"
-        detailsHeightConstraint.constant = 130
-        window.setContentSize(NSSize(width: window.frame.width, height: 640))
-    }
-
-    private func returnFocusAfterSuccessfulAction() {
-        guard hideAfterActionCheckbox.state == .on else {
-            showWindow()
-            return
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            guard let self else { return }
-            self.window.orderOut(nil)
-            NSApp.hide(nil)
-        }
-    }
-
-    private func updateWorkingDirectoryLabel() {
-        guard let workingDirectoryLabel else { return }
-        workingDirectoryLabel.stringValue = (workingDirectory as NSString).abbreviatingWithTildeInPath
-    }
-
-    private func isDirectory(_ path: String) -> Bool {
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
-    }
-
-    private func detectCLI(_ target: Target) -> [String]? {
-        if let cached = commandCache[target.id] {
-            return cached
-        }
-        let command = firstExistingCommand(target.candidates)
-        commandCache[target.id] = command
-        return command
-    }
-
-    private func firstExistingCommand(_ candidates: [CommandCandidate]) -> [String]? {
-        for candidate in candidates {
-            if candidate.executable.contains("/") {
-                if FileManager.default.isExecutableFile(atPath: candidate.executable) {
-                    return [candidate.executable] + candidate.args
-                }
-            } else {
-                let result = runShell("command -v \(shellQuote(candidate.executable))")
-                if result.status == 0 {
-                    let value = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !value.isEmpty { return [value] + candidate.args }
-                }
-            }
-        }
-        return nil
-    }
-
-    private func hasSession(_ name: String) -> Bool {
-        runShell("tmux has-session -t \(shellQuote(name))").status == 0
-    }
-
-    private func tmuxSessions() -> [String] {
-        let result = runShell("tmux list-sessions -F '#S'")
-        guard result.status == 0 else { return [] }
-        return result.output
-            .split(separator: "\n")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    private func tmuxSessionCreatedTimes() -> [String: Date] {
-        let result = runShell("tmux list-sessions -F '#S|#{session_created}'")
-        guard result.status == 0 else { return [:] }
-        var values: [String: Date] = [:]
-        for line in result.output.split(separator: "\n") {
-            let parts = line.split(separator: "|", maxSplits: 1).map(String.init)
-            guard parts.count == 2, let timestamp = TimeInterval(parts[1]) else { continue }
-            values[parts[0]] = Date(timeIntervalSince1970: timestamp)
-        }
-        return values
-    }
-
-    private func runAppleScript(_ source: String) -> Bool {
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error {
-            appendStatus("AppleScript error: \(error)")
-            return false
-        }
-        return true
-    }
-
-    private func runShell(_ command: String) -> ShellResult {
-        runExecutable("/bin/zsh", args: ["-lc", "export PATH=\(shellQuote(pathValue)); \(command)"])
-    }
-
-    private func runExecutable(_ executable: String, args: [String]) -> ShellResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = args
-        process.environment = [
-            "PATH": pathValue,
-            "HOME": NSHomeDirectory(),
-            "LANG": "en_US.UTF-8",
-            "LC_ALL": "en_US.UTF-8",
-        ]
-        let pipe = Pipe()
-        var outputData = Data()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-            outputData = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let output = String(data: outputData, encoding: .utf8) ?? ""
-            return ShellResult(status: process.terminationStatus, output: output)
-        } catch {
-            return ShellResult(status: 1, output: error.localizedDescription)
-        }
-    }
-
-    private func appendStatus(_ message: String) {
-        eventMessages.append(message)
-        if eventMessages.count > 20 {
-            eventMessages.removeFirst(eventMessages.count - 20)
-        }
-        refreshStatus()
-    }
-
-    private func setStatus(_ message: String) {
-        statusView.string = message
-        statusView.scrollToEndOfDocument(nil)
-    }
-
-    private func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-
-    private func escapeAppleScript(_ value: String) -> String {
-        value.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.beginSheetModal(for: window)
     }
 }
 

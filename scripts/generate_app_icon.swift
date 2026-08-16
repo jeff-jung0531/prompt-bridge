@@ -63,10 +63,10 @@ func drawIcon(size: Int) -> NSImage {
     panel.stroke()
 
     let promptAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 250 * scale, weight: .bold),
+        .font: NSFont.monospacedSystemFont(ofSize: 230 * scale, weight: .bold),
         .foregroundColor: NSColor(calibratedRed: 0.39, green: 0.98, blue: 0.77, alpha: 1),
     ]
-    NSString(string: ">").draw(at: NSPoint(x: 248 * scale, y: 444 * scale), withAttributes: promptAttributes)
+    NSString(string: "MD").draw(at: NSPoint(x: 222 * scale, y: 430 * scale), withAttributes: promptAttributes)
 
     let cursor = NSBezierPath(roundedRect: NSRect(x: 472 * scale,
                                                   y: 428 * scale,
@@ -77,27 +77,53 @@ func drawIcon(size: Int) -> NSImage {
     NSColor(calibratedRed: 0.39, green: 0.98, blue: 0.77, alpha: 1).setFill()
     cursor.fill()
 
-    let bubble = NSBezierPath(roundedRect: NSRect(x: 512 * scale,
-                                                  y: 584 * scale,
-                                                  width: 260 * scale,
-                                                  height: 132 * scale),
-                              xRadius: 48 * scale,
-                              yRadius: 48 * scale)
-    NSColor(calibratedRed: 0.93, green: 0.98, blue: 1.0, alpha: 0.92).setFill()
-    bubble.fill()
+    let globeRect = NSRect(x: 548 * scale,
+                           y: 556 * scale,
+                           width: 220 * scale,
+                           height: 220 * scale)
+    let globe = NSBezierPath(ovalIn: globeRect)
+    NSColor(calibratedRed: 0.93, green: 0.98, blue: 1.0, alpha: 0.94).setFill()
+    globe.fill()
+    NSColor(calibratedRed: 0.04, green: 0.09, blue: 0.13, alpha: 0.95).setStroke()
+    globe.lineWidth = 8 * scale
+    globe.stroke()
 
-    let bubbleTextAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 72 * scale, weight: .bold),
+    NSColor(calibratedRed: 0.04, green: 0.09, blue: 0.13, alpha: 0.55).setStroke()
+    for offset in [-54.0, 0.0, 54.0] {
+        let x = globeRect.midX + CGFloat(offset) * scale
+        let meridian = NSBezierPath()
+        meridian.move(to: NSPoint(x: x, y: globeRect.minY + 18 * scale))
+        meridian.curve(to: NSPoint(x: x, y: globeRect.maxY - 18 * scale),
+                       controlPoint1: NSPoint(x: x - 42 * scale, y: globeRect.midY - 54 * scale),
+                       controlPoint2: NSPoint(x: x - 42 * scale, y: globeRect.midY + 54 * scale))
+        meridian.lineWidth = 5 * scale
+        meridian.stroke()
+    }
+    for offset in [-44.0, 0.0, 44.0] {
+        let y = globeRect.midY + CGFloat(offset) * scale
+        let parallel = NSBezierPath()
+        parallel.move(to: NSPoint(x: globeRect.minX + 18 * scale, y: y))
+        parallel.curve(to: NSPoint(x: globeRect.maxX - 18 * scale, y: y),
+                       controlPoint1: NSPoint(x: globeRect.midX - 52 * scale, y: y + 20 * scale),
+                       controlPoint2: NSPoint(x: globeRect.midX + 52 * scale, y: y + 20 * scale))
+        parallel.lineWidth = 5 * scale
+        parallel.stroke()
+    }
+
+    let langBadge = NSBezierPath(roundedRect: NSRect(x: 496 * scale,
+                                                     y: 572 * scale,
+                                                     width: 182 * scale,
+                                                     height: 98 * scale),
+                                 xRadius: 34 * scale,
+                                 yRadius: 34 * scale)
+    NSColor(calibratedRed: 0.39, green: 0.98, blue: 0.77, alpha: 0.94).setFill()
+    langBadge.fill()
+
+    let langAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: 56 * scale, weight: .bold),
         .foregroundColor: NSColor(calibratedRed: 0.04, green: 0.09, blue: 0.13, alpha: 1),
     ]
-    NSString(string: "한 A").draw(at: NSPoint(x: 566 * scale, y: 616 * scale), withAttributes: bubbleTextAttributes)
-
-    let glow = NSBezierPath(ovalIn: NSRect(x: 706 * scale,
-                                           y: 706 * scale,
-                                           width: 86 * scale,
-                                           height: 86 * scale))
-    NSColor(calibratedRed: 0.38, green: 0.95, blue: 0.76, alpha: 0.85).setFill()
-    glow.fill()
+    NSString(string: "FILE").draw(at: NSPoint(x: 522 * scale, y: 596 * scale), withAttributes: langAttributes)
 
     return image
 }

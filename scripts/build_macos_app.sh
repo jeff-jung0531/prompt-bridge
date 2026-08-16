@@ -3,7 +3,7 @@ set -euo pipefail
 
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 dist_dir="$root_dir/dist"
-app_name="IME Safe AI CLI Terminal"
+app_name="Prompt Bridge"
 app_dir="$dist_dir/$app_name.app"
 contents_dir="$app_dir/Contents"
 macos_dir="$contents_dir/MacOS"
@@ -29,23 +29,23 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>IME Safe AI CLI Terminal</string>
+  <string>Prompt Bridge</string>
   <key>CFBundleExecutable</key>
-  <string>IMESafeAI</string>
+  <string>PromptBridge</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.jeffjung.imesafeaicliterminal</string>
+  <string>dev.jeffjung.aipromptbridge</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>IME Safe AI CLI Terminal</string>
+  <string>Prompt Bridge</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.20</string>
+  <string>0.2.0</string>
   <key>CFBundleVersion</key>
-  <string>20</string>
+  <string>21</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>
@@ -54,25 +54,17 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-swiftc "$root_dir/Sources/IMESafeAI/main.swift" -o "$macos_dir/IMESafeAI" -framework AppKit
+swiftc "$root_dir/Sources/IMESafeAI/main.swift" -o "$macos_dir/PromptBridge" -framework AppKit
 
-cp "$root_dir/ai-cli-paste" "$resources_dir/ai-cli-paste"
-cp "$root_dir/ai-cli-paste-gui" "$resources_dir/ai-cli-paste-gui"
-cp "$root_dir/ai-cli-paste-wizard" "$resources_dir/ai-cli-paste-wizard"
-cp "$root_dir/install.sh" "$resources_dir/install.sh"
 cp "$root_dir/README.md" "$resources_dir/README.md"
 cp "$root_dir/LICENSE" "$resources_dir/LICENSE"
 cp "$root_dir/assets/AppIcon.icns" "$resources_dir/AppIcon.icns"
-mkdir -p "$resources_dir/docs" "$resources_dir/examples"
-cp "$root_dir"/docs/*.md "$resources_dir/docs/"
-cp "$root_dir"/examples/* "$resources_dir/examples/"
-chmod +x "$resources_dir/ai-cli-paste" "$resources_dir/ai-cli-paste-gui" "$resources_dir/ai-cli-paste-wizard" "$resources_dir/install.sh"
 
 if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$app_dir"
 fi
 
-zip_path="$dist_dir/ime-safe-ai-cli-terminal-macos.zip"
+zip_path="$dist_dir/prompt-bridge-macos.zip"
 (
   cd "$dist_dir"
   ditto -c -k --sequesterRsrc --keepParent "$app_name.app" "$zip_path"
