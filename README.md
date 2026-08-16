@@ -1,4 +1,4 @@
-# Prompt Bridge
+# Long Paste Fix
 
 Tiny free macOS helper for long-paste failures in AI chat apps.
 
@@ -7,7 +7,7 @@ object that reaches the model empty. See related reports:
 [anthropics/claude-code#77946](https://github.com/anthropics/claude-code/issues/77946),
 [anthropics/claude-code#82590](https://github.com/anthropics/claude-code/issues/82590).
 
-Prompt Bridge avoids that fragile paste path by turning copied long text into a
+Long Paste Fix avoids that fragile paste path by turning copied long text into a
 real `.md` file, copying the file, and letting you attach it with `Cmd+V`.
 
 ## What It Does
@@ -20,14 +20,14 @@ real `.md` file, copying the file, and letting you attach it with `Cmd+V`.
 Files are kept in the app cache:
 
 ```text
-~/Library/Caches/Prompt Bridge
+~/Library/Caches/Long Paste Fix
 ```
 
 The app keeps the newest files and automatically removes older handoff files.
 
 ## Permissions
 
-Prompt Bridge only reads the current clipboard when you click **Make File** and
+Long Paste Fix only reads the current clipboard when you click **Make File** and
 then copies the generated file back to the clipboard. It does not need browser,
 terminal, input monitoring, or accessibility permissions.
 
@@ -38,7 +38,7 @@ The macOS app is free and open source.
 Release zip name:
 
 ```text
-prompt-bridge-macos.zip
+long-paste-fix-macos.zip
 ```
 
 The app is ad-hoc signed for local distribution. If macOS blocks the first

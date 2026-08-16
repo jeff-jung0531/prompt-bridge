@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import QuartzCore
 
-private let appName = "Prompt Bridge"
-private let bundleVersion = "0.2.0"
+private let appName = "Long Paste Fix"
+private let bundleVersion = "0.2.1"
 private let fixedWindowContentSize = NSSize(width: 520, height: 214)
 private let buttonHeight: CGFloat = 30
 private let smallButtonHeight: CGFloat = 24
@@ -333,7 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var promptDirectory: URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        return base.appendingPathComponent("Prompt Bridge", isDirectory: true)
+        return base.appendingPathComponent("Long Paste Fix", isDirectory: true)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

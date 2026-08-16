@@ -3,7 +3,7 @@ set -euo pipefail
 
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 dist_dir="$root_dir/dist"
-app_name="Prompt Bridge"
+app_name="Long Paste Fix"
 app_dir="$dist_dir/$app_name.app"
 contents_dir="$app_dir/Contents"
 macos_dir="$contents_dir/MacOS"
@@ -29,23 +29,23 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Prompt Bridge</string>
+  <string>Long Paste Fix</string>
   <key>CFBundleExecutable</key>
-  <string>PromptBridge</string>
+  <string>LongPasteFix</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.jeffjung.aipromptbridge</string>
+  <string>dev.jeffjung.longpastefix</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Prompt Bridge</string>
+  <string>Long Paste Fix</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.2.0</string>
+  <string>0.2.1</string>
   <key>CFBundleVersion</key>
-  <string>21</string>
+  <string>22</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>
@@ -54,7 +54,7 @@ cat > "$contents_dir/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-swiftc "$root_dir/Sources/IMESafeAI/main.swift" -o "$macos_dir/PromptBridge" -framework AppKit
+swiftc "$root_dir/Sources/IMESafeAI/main.swift" -o "$macos_dir/LongPasteFix" -framework AppKit
 
 cp "$root_dir/README.md" "$resources_dir/README.md"
 cp "$root_dir/LICENSE" "$resources_dir/LICENSE"
@@ -64,7 +64,7 @@ if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$app_dir"
 fi
 
-zip_path="$dist_dir/prompt-bridge-macos.zip"
+zip_path="$dist_dir/long-paste-fix-macos.zip"
 (
   cd "$dist_dir"
   ditto -c -k --sequesterRsrc --keepParent "$app_name.app" "$zip_path"
